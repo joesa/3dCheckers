@@ -1,0 +1,7 @@
+{
+  "name": "aether-draughts",
+  "version": "1.0.0",
+  "description": "Multiplayer 3D checkers on a floating island — three.js, serverless WebRTC",
+  "type": "module",
+  "private": true
+}

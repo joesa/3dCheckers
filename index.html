@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Aether Draughts — Multiplayer 3D Checkers</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='%23e8593f'/><circle cx='50' cy='50' r='22' fill='%23150f2e'/></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@600;800&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css"/>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<div id="vignette"></div>
+
+<div id="hud" class="hidden">
+  <div id="turn-card" class="glass">
+    <div id="turn-emblem"></div>
+    <div id="turn-text">…</div>
+    <div id="timer-wrap" class="hidden"><div id="timer-bar"></div></div>
+  </div>
+
+  <div id="log-panel" class="glass">
+    <h3>Battle Log</h3>
+    <ol id="log"></ol>
+  </div>
+
+  <div id="cap-panel" class="glass">
+    <h3>Captured</h3>
+    <div class="cap-row"><span class="cap-label frost-l">Frost</span><div id="cap-black" class="pips"></div></div>
+    <div class="cap-row"><span class="cap-label ember-l">Ember</span><div id="cap-red" class="pips"></div></div>
+  </div>
+
+  <div id="side-btns">
+    <button id="btn-resign" class="btn danger">Resign</button>
+    <button id="btn-rematch" class="btn">Rematch</button>
+    <button id="btn-theme" class="btn tiny" title="Change your world">Worlds</button>
+    <button id="btn-sound" class="btn tiny" title="Toggle sound">♪</button>
+    <button id="btn-quit" class="btn tiny" title="Back to menu">⌂</button>
+  </div>
+
+  <div id="chat" class="glass hidden">
+    <h3>Taunt Box</h3>
+    <div id="chat-msgs"></div>
+    <form id="chat-form" autocomplete="off">
+      <input id="chat-input" maxlength="120" placeholder="Say something…" />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+</div>
+
+<div id="menu" class="overlay">
+  <div class="panel glass">
+    <h1 class="title">AETHER<span>DRAUGHTS</span></h1>
+    <p class="tag">Sky-borne checkers for duelists.<br/>Capture the storm. Crown your legend.</p>
+    <div class="menu-btns">
+      <button class="btn primary" id="b-hotseat">Pass &amp; Play</button>
+      <button class="btn" id="b-ai">Play vs Storm (Solo)</button>
+      <button class="btn" id="b-online">Online Duel (WebRTC)</button>
+      <button class="btn" id="b-local">Same-Browser Tabs</button>
+      <button class="btn ghost" id="b-howto">How to Play</button>
+    </div>
+    <div id="lobby" class="hidden"></div>
+  </div>
+</div>
+
+<div id="howto" class="overlay hidden">
+  <div class="panel glass howto">
+    <h2>How to Play</h2>
+    <h4>Getting Started</h4>
+    <ul>
+      <li><b>Pass &amp; Play</b> — duel a friend on this device; turns alternate between Ember and Frost.</li>
+      <li><b>Play vs Storm</b> — solo duel against the machine at four tiers: Squire (forgiving), Knight, Warlock, and Storm Monarch (brutal). You always lead as Ember.</li>
+      <li><b>Online Duel</b> — tap <i>Create Invite</i>, send the code to your friend (any chat app works). They paste it, send their answer back, you paste that and tap <i>Connect</i>. No accounts, no servers — the two browsers talk directly.</li>
+      <li><b>Same-Browser Tabs</b> — create a room code, open this page in a second tab and join with the same code.</li>
+    </ul>
+    <h4>Controls</h4>
+    <ul>
+      <li><b>Click one of your pieces</b> — glowing tiles show its legal moves (<span class="ok-l">green = move</span>, <span class="bad-l">red = capture</span>). <b>Click a tile</b> to go.</li>
+      <li>Drag to orbit the island · scroll to zoom · click empty ground to deselect.</li>
+      <li>Ember moves first. The avatars' hands fly in whenever a piece is played — yours and theirs.</li>
+    </ul>
+    <h4>Rules — English Draughts</h4>
+    <ul>
+      <li>Men move <b>one step diagonally forward</b> onto an empty dark square.</li>
+      <li>Capture by <b>leaping over an adjacent enemy</b> into the empty square beyond; the enemy is removed.</li>
+      <li><b>Jumps are forced.</b> If a capture exists you must take one — and multi-jump chains must be completed in one move.</li>
+      <li>Reach the far rank to <b>crown</b> a piece. Kings move and capture in all four diagonals; a piece crowned mid-chain ends its turn at once.</li>
+      <li>Win by capturing every enemy piece, or by leaving your opponent with no legal move.</li>
+      <li>Online duels run a <b>45s turn timer</b> — on timeout a legal move plays itself.</li>
+    </ul>
+    <div class="menu-btns"><button id="b-howto-close" class="btn primary">Got it</button></div>
+  </div>
+</div>
+
+<div id="result" class="overlay hidden">
+  <div class="panel glass center">
+    <div id="result-emblem"></div>
+    <h2 id="result-title">Victory</h2>
+    <p id="result-sub"></p>
+    <div class="menu-btns">
+      <button id="b-rematch2" class="btn primary">Rematch</button>
+      <button id="b-back" class="btn">Main Menu</button>
+    </div>
+  </div>
+</div>
+
+<div id="themes" class="overlay hidden">
+  <div class="panel glass">
+    <h2>Worlds</h2>
+    <p class="tag">Choose the realm around you. Your opponent and the spectators may sit in different worlds — the board, the duel, and every move are shared.</p>
+    <div class="th-grid" id="theme-grid"></div>
+    <div class="menu-btns"><button id="b-themes-close" class="btn primary">Done</button></div>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
