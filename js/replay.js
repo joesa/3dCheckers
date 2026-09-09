@@ -14,7 +14,13 @@ export function openViewer(GAME,world,code,onExit){
   const data=parseCode(code);
   if(!data)return false;
   const el=document.getElementById('replay');
+  const hud=document.getElementById('hud');
+  const chat=document.getElementById('chat');
+  const emote=document.getElementById('emote-bar');
   el.classList.remove('hidden');
+  hud.classList.add('hidden');
+  chat.classList.add('hidden');
+  emote.classList.add('hidden');
   const bar=document.getElementById('rp-track');
   const info=document.getElementById('rp-info');
   const btn=document.getElementById('rp-play');
@@ -70,6 +76,7 @@ export function openViewer(GAME,world,code,onExit){
   document.getElementById('rp-close').onclick=()=>{
     playing=false;
     el.classList.add('hidden');
+    hud.classList.remove('hidden');
     if(onExit)onExit();
   };
   paint();
