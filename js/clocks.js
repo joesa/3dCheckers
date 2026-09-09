@@ -181,7 +181,7 @@ export function buildSkeletonBell(opts){
   const dialRing=new THREE.Mesh(new THREE.CircleGeometry(.3,.64),
     new THREE.MeshBasicMaterial({map:dialTexture({brand:'SKELETON BELL',numerals:'rgba(226,214,180,.95)',tick:'rgba(201,160,78,.85)',inner:'rgba(185,194,204,.4)'}),
       transparent:true,depthWrite:false}));
-  dialRing.position.z=.055;
+  dialRing.position.z=-.3;
   shell.add(dialRing);
 
   const gears=new THREE.Group();
@@ -218,7 +218,7 @@ export function buildSkeletonBell(opts){
     .forEach(([x,y,z])=>shell.add(jewel(x,y,z)));
 
   const hands=new THREE.Group();
-  hands.position.z=.068;
+  hands.position.z=.32;
   shell.add(hands);
   const hHour=hand(.155,.026,dark);
   const hMin=hand(.225,.02,dark);
