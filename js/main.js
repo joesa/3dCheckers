@@ -445,6 +445,20 @@ function rtcLobby(){
     <div class="status" id="lb-status"></div>`);
   const status=(t,err)=>{const s=$('#lb-status');s.textContent='';s.innerHTML=t;s.className='status'+(err?' err':'');};
   let room=null;
+  const BLOCK_HINT='Peer-to-peer seems blocked on this network. If it stays stuck, play via <b>Same-Browser Tabs</b> or swap roles/networks.';
+  const watchLink=(r)=>{
+    r.onState=st=>{
+      if(st==='connecting')status('Negotiating link…');
+      else if(st==='connected')status('Link established — entering duel…');
+      else if(st==='failed')status('Direct link failed, relaying through TURN… ' + BLOCK_HINT,true);
+      else if(st==='disconnected')status('Peer connection lost.',true);
+    };
+    setTimeout(()=>{
+      if(!r.dc||r.dc.readyState!=='open'){
+        status('Still connecting — relays can take up to 30s. If nothing happens, ' + BLOCK_HINT,true);
+      }
+    },20000);
+  };
   fillThemeSelect($('#rtc-theme'),world.currentTheme());
   $('#rtc-haveinvite').onclick=()=>{
     sfx.click();
@@ -476,6 +490,7 @@ function rtcLobby(){
     try{
       status('Connecting…');
       await room.acceptAnswer($('#rtc-answer').value);
+      watchLink(room);
     }catch(e){status('Bad answer code: '+e.message,true);}
   };
   $('#rtc-accept').onclick=async()=>{
@@ -485,6 +500,7 @@ function rtcLobby(){
       G.rtcWasHost=false;
       G.transport=room;
       room.onOpen=()=>{G.mode='guest';G.myColor=GAME.BLACK;G.transport.send({t:'hello'});};
+      watchLink(room);
       const ans=await room.acceptOffer($('#rtc-in').value);
       $('#rtc-out').value=ans;
       show($('#rtc-join'),true);

@@ -1,6 +1,17 @@
 const b64e=s=>btoa(unescape(encodeURIComponent(s)));
 const b64d=s=>decodeURIComponent(escape(atob(s.trim())));
 
+/* TURN for symmetric-NAT traversal. Point host/credentials at your coturn.
+ * LAN players: the LAN address below just works once coturn is running.
+ * WAN players: port-forward 3478/tcp+udp + udp 49160-49180 and use the
+ * public address (see turn/coturn.conf). */
+export const TURN_CFG={
+  host:'172.16.0.107',
+  port:3478,
+  username:'aether',
+  credential:'devturnpass123',
+};
+
 export class TabsTransport{
   constructor(room,onMessage){
     this.room=room;
@@ -19,10 +30,17 @@ export class RTCRoom{
     this.dc=null;
     this.onOpen=null;
     this.onClose=null;
+    this.onState=null;
     this.pc=new RTCPeerConnection({iceServers:[
       {urls:'stun:stun.l.google.com:19302'},
       {urls:'stun:stun1.l.google.com:19302'},
-    ]});
+      {urls:'stun:stun.cloudflare.com:3478'},
+      {urls:[
+        `turn:${TURN_CFG.host}:${TURN_CFG.port}`,
+        `turn:${TURN_CFG.host}:${TURN_CFG.port}?transport=tcp`,
+      ],username:TURN_CFG.username,credential:TURN_CFG.credential},
+    ],iceCandidatePoolSize:2});
+    this.pc.onconnectionstatechange=()=>{this.onState&&this.onState(this.pc.connectionState);};
   }
   _hook(dc){
     this.dc=dc;
@@ -37,7 +55,7 @@ export class RTCRoom{
       if(this.pc.iceGatheringState==='complete')return res();
       const check=()=>{if(this.pc.iceGatheringState==='complete'){this.pc.removeEventListener('icegatheringstatechange',check);res();}};
       this.pc.addEventListener('icegatheringstatechange',check);
-      setTimeout(res,3500);
+      setTimeout(res,9000);
     });
   }
   async host(){

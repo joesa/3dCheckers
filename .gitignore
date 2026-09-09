@@ -1,4 +1,25 @@
+# deps / build
 node_modules/
-.playwright-mcp/
+dist/
+
+# vercel
+.vercel/
+
+# env & secrets
+.env
+.env.*
+
+# logs
+*.log
+npm-debug.log*
+
+# editors / OS
+.vscode/
+.idea/
 .DS_Store
-.vercel
+Thumbs.db
+
+# test/tool artifacts
+.playwright-mcp/
+test-results/
+coverage/
