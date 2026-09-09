@@ -1,0 +1,30 @@
+[Unit]
+Description=Coturn TURN Server for Aether Draughts
+Documentation=https://github.com/coturn/coturn
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/turnserver -c /run/media/joe/Data1/scripts/another_game/turn/coturn.conf --pidfile=
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+LimitNOFILE=65535
+
+# Security hardening
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectKernelLogs=true
+ProtectClock=true
+ProtectProc=inaccessible
+ProcSubset=pid
+ReadWritePaths=/run/media/joe/Data1/scripts/another_game/turn
+
+[Install]
+WantedBy=multi-user.target

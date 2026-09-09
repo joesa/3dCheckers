@@ -1,7 +1,7 @@
 import * as GAME from './game.js';
 import {createWorld} from './world.js';
 import {makeAvatar,makeCrowd} from './actors.js';
-import {chooseMove,LEVEL_NAMES,PERSONAS,taunt as aiTaunt} from './ai.js';
+import {chooseMove,LEVEL_NAMES,PERSONAS,taunt as aiTaunt,QK,qkReset} from './ai.js';
 import {TabsTransport,RTCRoom} from './net.js';
 import {THEMES,THEME_IDS,DEFAULT_THEME} from './themes.js';
 import {setSkin} from './pieces.js';
@@ -29,6 +29,17 @@ function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 const EQ=getEquip();
 setSkin(EQ.skin,(SKINS[EQ.skin]||SKINS.default).params||{});
 const world=createWorld($('#gl'),lsGet('ad-theme')||DEFAULT_THEME);
+
+const chatLastSend={last:0,throttle:1500};
+function throttledChat(text){
+  const now=Date.now();
+  if(now-chatLastSend.last<chatLastSend.throttle){
+    toast('Please wait before sending another message','bad');
+    return false;
+  }
+  chatLastSend.last=now;
+  return true;
+}
 
 /* avatars + crowd — seeded so both duelists see the same designs */
 let SEED=Math.random()*1e9|0;
@@ -175,6 +186,7 @@ async function playMove(move){
   }
   if(move.captures.length&&G.mode==='ai'&&color===GAME.BLACK&&G.persona&&Math.random()<.4)showTaunt(aiTaunt(G.aiLevel,'cap'));
   if(G.gv)gauntletMoveHook(color,move);
+  if(G.qk)quantMoveHook(color,move);
   if(G.mode==='puzzle'){puzzleJudge(move);return;}
   if(G.watchCode&&isOnline())pushMove(G.watchCode,nextState.moveNo,color,move);
   if(G.mode!=='hotseat'&&isOnline())G.transport.send({t:'state',state:G.state});
@@ -258,6 +270,7 @@ function endGame(winnerColor,resigned){
     G.wagerN=0;
     refreshWallet();
   }
+  if(G.qk)quantEnd(winnerColor);
   if(G.gv)gauntletEnd(winnerColor);
   if(isOnline()&&SRV.ok&&SRV.me&&SRV.oppUid&&G.myColor&&!G.gv&&G.state){
     const res=winnerColor===G.myColor?'win':'loss';
@@ -462,8 +475,10 @@ function enterMatch(){
 function sendChat(text){
   if(!text.trim())return;
   if(G.mode==='hotseat'){appendChat('sys',MYNAME,'(chat needs an online duel)');return;}
-  G.transport.send({t:'chat',name:MYNAME,text:text.trim()});
-  appendChat('me',MYNAME,text.trim());
+  if(!throttledChat(text))return;
+  const sanitized=text.trim().replace(/[<>]/g,'');
+  G.transport.send({t:'chat',name:MYNAME,text:sanitized});
+  appendChat('me',MYNAME,sanitized);
 }
 
 /* ================= lobby ================= */
@@ -768,7 +783,17 @@ function maybeAI(){
   clearTimeout(G.aiTimer);
   G.aiTimer=setTimeout(()=>{
     if(G.mode!=='ai'||G.over||G.busy||G.state.turn!==GAME.BLACK)return;
-    const mv=chooseMove(G.state,G.aiLevel);
+    qkReset();
+    const mv=chooseMove(G.state,G.aiLevel,G.qk?{forceSlip:G.qk.armed&&!G.qk.slipSeen&&G.qk.myMoves>=G.qk.slipAt}:undefined);
+    if(G.qk&&QK.lastSlip){
+      G.qk.slipSeen=true;
+      G.qk.armed=false;
+      const s=qkState();
+      s.armed=false;
+      qkSave(s);
+      toast('QUANTKING LETS HIS GUARD DOWN!','good');
+      showTaunt(aiTaunt('titan','slip'));
+    }
     if(mv)playMove(mv);
   },520+Math.random()*560);
 }
@@ -808,10 +833,122 @@ function startAI(level,tcId){
   if(G.persona)setTimeout(()=>showTaunt(G.persona.start),800);
 }
 
+/* ================= QuantKing — beat the machine, earn the points ================= */
+
+const QK_STORE='ad-qk';
+function qkState(){
+  try{return {losses:0,wins:0,best:0,armed:false,...JSON.parse(localStorage.getItem(QK_STORE)||'{}')};}
+  catch(e){return {losses:0,wins:0,best:0,armed:false};}
+}
+function qkSave(s){try{localStorage.setItem(QK_STORE,JSON.stringify(s));}catch(e){}}
+
+function quantLobby(){
+  const s=qkState();
+  openLobby(`
+    <h2 style="color:var(--gold)">THE QUANTKING</h2>
+    <p class="hint"><b>Want to earn free points? Beat QuantKing in a one-on-one match.</b><br/>
+    He is the king of checkers \u2014 he has solved this game a million times over and wins his duels the way storms win arguments.
+    But pride is a crack in every theorem: the further he pulls ahead, the more carelessly he flings his crown around.
+    Puncture him early, drag him deep, and when his guard finally drops \u2014 strike. The purse is real.</p>
+    <div class="shop-grid" style="margin:12px 0">
+      <div class="shop-card"><h4>Draw blood</h4><div class="desc">Every piece you tear from the Titan (first 15)</div><div class="price">+2 pts</div></div>
+      <div class="shop-card"><h4>Survive 12 moves</h4><div class="desc">Still standing at move twelve</div><div class="price">+10 pts</div></div>
+      <div class="shop-card"><h4>Survive 25 moves</h4><div class="desc">The crowd starts chanting</div><div class="price">+25 pts</div></div>
+      <div class="shop-card"><h4>THE THRONE</h4><div class="desc">Beat QuantKing outright \u2014 plus +250 the first time each day</div><div class="price">+500 pts</div></div>
+    </div>
+    <div class="status">Record \u2014 <b style="color:var(--gold)">${s.wins}</b> W / ${s.losses} L${s.armed?' \u00B7 <b style="color:var(--gold)">he underestimates you \u2014 his guard WILL drop this duel</b>':' \u00B7 every 4 losses he grows arrogant: his next duel guarantees one slip'}</div>
+    <div class="row"><button class="btn primary" id="qk-go">Sit at the Board</button><button class="btn" id="qk-back">Back</button></div>`);
+  $('#qk-back').onclick=()=>{sfx.click();show($('#lobby'),false);};
+  $('#qk-go').onclick=()=>{sfx.click();startQuant();};
+}
+
+function startQuant(){
+  teardownNet();
+  const s=qkState();
+  G.mode='ai';G.myColor=GAME.RED;G.aiLevel='titan';
+  G.clockId='none';
+  G.clock=new Clocks('none');
+  G.clockInited=false;
+  G.persona=PERSONAS.titan;
+  G.qk={caps:0,myMoves:0,m12:false,m25:false,pts:0,armed:!!s.armed,slipSeen:false,slipAt:6+(Math.random()*10|0)};
+  G.state=GAME.initialState();
+  G.over=false;G.busy=false;
+  $('#log').innerHTML='';
+  world.showLastMove(null);
+  enterMatch();
+  renderBoard(true);
+  refreshMoves();
+  updateHUD();
+  showModeBanner('THE QUANTKING \u00B7 beat him, take 500 pts');
+  if(s.armed)toast('He underestimates you \u2014 his guard will drop this duel','good');
+  setTimeout(()=>showTaunt(PERSONAS.titan.start),900);
+}
+
+function quantMoveHook(color,move){
+  if(!G.qk||G.state.winner)return;
+  if(color!==GAME.RED)return;
+  if(move.captures.length&&G.qk.caps<15){
+    const n=Math.min(move.captures.length,15-G.qk.caps);
+    ECO.addCoins(n,'qk-blood');
+    G.qk.pts+=n;
+    refreshWallet();
+    toast('+'+n+' pts \u00B7 a splinter from the Titan','good');
+  }
+  G.qk.caps+=move.captures.length;
+  G.qk.myMoves++;
+  if(!G.qk.m12&&G.qk.myMoves>=12){
+    G.qk.m12=true;ECO.addCoins(10,'qk-12');G.qk.pts+=10;refreshWallet();
+    toast('+10 pts \u00B7 twelve moves survived','good');
+  }
+  if(!G.qk.m25&&G.qk.myMoves>=25){
+    G.qk.m25=true;ECO.addCoins(25,'qk-25');G.qk.pts+=25;refreshWallet();
+    toast('+25 pts \u00B7 they are chanting your name','good');
+  }
+}
+
+function quantEnd(winnerColor){
+  const s=qkState();
+  const won=winnerColor===GAME.RED;
+  const btn=$('#b-rematch2');
+  btn.textContent='Another Duel';
+  btn.onclick=()=>{sfx.click();show($('#result'),false);quantLobby();};
+  const earned=G.qk.pts;
+  G.qk=null;
+  if(won){
+    let purse=500;
+    let bonus='';
+    if(ECO.dailyOnce('qkwin',()=>{})){purse+=250;bonus=' \u00B7 +250 for the first fall of the day!';}
+    ECO.addCoins(purse,'qk-win');
+    if(!unlocked('clockwork')){
+      ECO.grantItem('clockwork','titan-slayer');
+      setTimeout(()=>toast('First Titan slain \u2014 Clockwork Brass armor unlocked free!','good'),1200);
+    }
+    s.wins++;
+    s.best=Math.max(s.best||0,earned+purse);
+    s.armed=false;
+    qkSave(s);
+    refreshWallet();
+    $('#result-title').textContent='THE TITAN FALLS';
+    $('#result-sub').textContent='+'+(earned+purse)+' points this duel'+bonus+' \u2014 the Marketplace bows to you, Titan-Slayer.';
+  }else{
+    ECO.addCoins(5,'qk-consolation');
+    s.losses++;
+    if(s.losses%4===0)s.armed=true;
+    qkSave(s);
+    refreshWallet();
+    $('#result-title').textContent='THE TITAN PREVAILS';
+    $('#result-sub').textContent=(s.armed
+      ?'Four losses \u2014 his pride swells. Next duel, his guard WILL drop. Strike then. '
+      :'So close is a country you now live in. He keeps the crown; you keep +'+(earned+5)+' points. Crowns are also for sale in the Marketplace. ')+
+      'Wins: '+s.wins+' \u00B7 losses: '+s.losses;
+  }
+}
+
 /* ================= UI wiring ================= */
 
 $('#b-hotseat').onclick=()=>{sfx.click();hotseatLobby();};
 $('#b-ai').onclick=()=>{sfx.click();aiLobby();};
+$('#b-quant').onclick=()=>{sfx.click();quantLobby();};
 $('#b-online').onclick=()=>{sfx.click();rtcLobby();};
 $('#b-local').onclick=()=>{sfx.click();localLobby();};
 $('#b-howto').onclick=()=>{sfx.click();show($('#menu'),false);show($('#howto'),true);};
@@ -822,6 +959,11 @@ $('#btn-sound').onclick=e=>{
   sfx.setEnabled(on);
   e.target.textContent=on?'♪':'✕';
   e.target.style.opacity=on?1:.5;
+};
+$('#btn-theme-mode').onclick=()=>{
+  toggleTheme();
+  const current=localStorage.getItem('ad-theme-mode')||'dark';
+  $('#btn-theme-mode').textContent=current==='dark'?'🌗':'☀';
 };
 $('#btn-resign').onclick=()=>{
   if(!G.started||G.over)return;
@@ -1474,21 +1616,31 @@ refreshEnvLook();
 world.onClockStrike(()=>sfx.bell());
 
 function toggleInspect(){
-  if(world.inspecting){
-    world.exitClockInspect();
-    show($('#timepiece-bar'),false);
-    return;
-  }
-  const style=world.clockStyle();
-  const item=CLOCKS[style]||{name:'The Skeleton Bell'};
-  $('#tp-name').textContent=item.name;
-  const on=lsGet('ad-digital')!=='0';
-  $('#tp-digital').textContent='Digital: '+(on?'On':'Off');
-  if(world.enterClockInspect())show($('#timepiece-bar'),true);
+  if(world.inspecting)world.exitClockInspect();
+  else world.enterClockInspect();
 }
+
+function toggleTheme(){
+  const themes=['dark','light'];
+  const current=localStorage.getItem('ad-theme-mode')||'dark';
+  const next=themes[(themes.indexOf(current)+1)%themes.length];
+  document.documentElement.setAttribute('data-theme',next);
+  localStorage.setItem('ad-theme-mode',next);
+  sfx.click();
+  toast('Theme switched to '+next,'good');
+}
+
+world.onInspectChange(on=>{
+  if(on){
+    const item=CLOCKS[world.clockStyle()]||{name:'The Skeleton Bell'};
+    $('#tp-name').textContent=item.name;
+    $('#tp-digital').textContent='Digital: '+(lsGet('ad-digital')!=='0'?'On':'Off');
+  }
+  show($('#timepiece-bar'),on);
+});
 $('#btn-clock').onclick=()=>{sfx.click();toggleInspect();};
-$('#tp-close').onclick=()=>{sfx.click();world.exitClockInspect();show($('#timepiece-bar'),false);};
-$('#tp-reset').onclick=()=>{sfx.click();world.exitClockInspect();show($('#timepiece-bar'),false);};
+$('#tp-close').onclick=()=>{sfx.click();world.exitClockInspect();};
+$('#tp-reset').onclick=()=>{sfx.click();world.exitClockInspect();};
 $('#tp-digital').onclick=()=>{
   const on=lsGet('ad-digital')==='0';
   lsSet('ad-digital',on?'1':'0');
@@ -1499,17 +1651,68 @@ $('#tp-digital').onclick=()=>{
 window.addEventListener('keydown',e=>{
   const tag=e.target&&e.target.tagName;
   if(tag==='INPUT'||tag==='TEXTAREA')return;
-  if(e.key==='Escape'&&world.inspecting){
-    world.exitClockInspect();
-    show($('#timepiece-bar'),false);
-  }else if((e.key==='c'||e.key==='C')&&!world.inspecting){
-    const openModal=document.querySelector('.overlay:not(.hidden),#menu:not(.hidden)');
+  if(e.key==='Escape'&&world.inspecting)world.exitClockInspect();
+  else if((e.key==='c'||e.key==='C')&&!world.inspecting){
+    const openModal=document.querySelector('.overlay:not(.hidden)');
     if(!openModal)toggleInspect();
+  }
+  else if((e.key==='r'||e.key==='R')&&!world.inspecting&&G.started&&!G.over){
+    sfx.click();
+    doRematch();
+  }
+  else if((e.key==='q'||e.key==='Q')&&!world.inspecting&&G.started){
+    sfx.click();
+    $('#btn-quit').click();
+  }
+  else if((e.key===' '||e.key==='Spacebar')&&!world.inspecting&&G.started){
+    sfx.click();
+    $('#btn-resign').click();
+  }
+  else if((e.key==='1')&&!world.inspecting&&G.started){
+    doEmote('wave');
+  }
+  else if((e.key==='2')&&!world.inspecting&&G.started){
+    doEmote('point');
+  }
+  else if((e.key==='3')&&!world.inspecting&&G.started){
+    doEmote('laugh');
+  }
+  else if((e.key==='4')&&!world.inspecting&&G.started){
+    doEmote('bow');
+  }
+  else if((e.key==='5')&&!world.inspecting&&G.started){
+    doEmote('taunt');
+  }
+  else if((e.key==='t'||e.key==='T')&&!world.inspecting){
+    toggleTheme();
+  }
+});
+
+window.addEventListener('error',e=>{
+  console.error('Uncaught error:',e.error);
+  toast('Something went wrong — please reload','bad');
+});
+
+window.addEventListener('unhandledrejection',e=>{
+  console.error('Unhandled rejection:',e.reason);
+  toast('A network error occurred — please check your connection','bad');
+});
+
+window.addEventListener('offline',()=>{
+  if(isOnline()){
+    toast('You appear to be offline — some features may be limited','bad');
+  }
+});
+
+window.addEventListener('online',()=>{
+  if(SRV.ok){
+    toast('Back online — syncing with server','good');
+    srvInit();
   }
 });
 
 window.__aether={G,world,GAME,playMove,refreshMoves,rigs,
   eco:ECO,doEmote,startPuzzle,startGauntlet,gvRound,openShop,showTaunt,buildCode,parseCode,
   endGame,startHotseat,SRV,createWatch,startSpectate,joinByCode,proposeWager,
-  refreshEnvLook,toggleInspect,CLOCKS,
+  refreshEnvLook,toggleInspect,CLOCKS,quantLobby,startQuant,
   get crowd(){return crowd;},get seed(){return SEED;}};

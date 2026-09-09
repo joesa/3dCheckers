@@ -1,3 +1,5 @@
+import {CONFIG} from './config.js';
+
 const b64e=s=>btoa(unescape(encodeURIComponent(s)));
 const b64d=s=>decodeURIComponent(escape(atob(s.trim())));
 
@@ -6,10 +8,10 @@ const b64d=s=>decodeURIComponent(escape(atob(s.trim())));
  * WAN players: port-forward 3478/tcp+udp + udp 49160-49180 and use the
  * public address (see turn/coturn.conf). */
 export const TURN_CFG={
-  host:'172.16.0.107',
-  port:3478,
-  username:'aether',
-  credential:'devturnpass123',
+  host:CONFIG.TURN_HOST,
+  port:CONFIG.TURN_PORT,
+  username:CONFIG.TURN_USER,
+  credential:CONFIG.TURN_CRED,
 };
 
 export class TabsTransport{
@@ -31,6 +33,8 @@ export class RTCRoom{
     this.onOpen=null;
     this.onClose=null;
     this.onState=null;
+    this.lastActivity=Date.now();
+    this.pingInterval=null;
     this.pc=new RTCPeerConnection({iceServers:[
       {urls:'stun:stun.l.google.com:19302'},
       {urls:'stun:stun1.l.google.com:19302'},
@@ -42,11 +46,19 @@ export class RTCRoom{
     ],iceCandidatePoolSize:2});
     this.pc.onconnectionstatechange=()=>{this.onState&&this.onState(this.pc.connectionState);};
   }
+  startPing(){if(!this.pingInterval)this.pingInterval=setInterval(()=>this.send({type:'ping'}),2000);}
+  stopPing(){if(this.pingInterval){clearInterval(this.pingInterval);this.pingInterval=null;}}
+  checkTimeout(){
+    const timeout=Date.now()-this.lastActivity>15000;
+    if(timeout&&this.onClose)this.onClose();
+    return timeout;
+  }
   _hook(dc){
     this.dc=dc;
-    dc.onopen=()=>this.onOpen&&this.onOpen();
-    dc.onclose=()=>this.onClose&&this.onClose();
+    dc.onopen=()=>{this.onOpen&&this.onOpen();this.startPing();};
+    dc.onclose=()=>{this.stopPing();this.onClose&&this.onClose();};
     dc.onmessage=e=>{
+      this.lastActivity=Date.now();
       try{this.onMessage&&this.onMessage(JSON.parse(e.data));}catch(err){}
     };
   }
@@ -79,5 +91,5 @@ export class RTCRoom{
   send(m){
     if(this.dc&&this.dc.readyState==='open')this.dc.send(JSON.stringify(m));
   }
-  close(){try{this.dc&&this.dc.close();this.pc&&this.pc.close();}catch(e){}}
+  close(){try{this.dc&&this.dc.close();this.pc&&this.pc.close();}catch(e){}this.stopPing();}
 }

@@ -78,11 +78,13 @@ pc.createOffer().then(o=>pc.setLocalDescription(o));
 ## How to play
 
 - Click a piece → glowing tiles show legal moves (green = move, red = capture) → click one.
+- **Want to earn free points? Beat QuantKing.** The gold button on the menu: a one-on-one duel against the king of checkers himself — a near-perfect engine (deep search, zero mercy) with a pride problem: the further ahead he gets, the more likely he is to fling his crown around. Points for every piece you draw from him, for surviving 12 and 25 moves, +500 for the win (+250 first fall of the day), a free armor unlock the first time you slay him — and after 4 losses he *guarantees* one sloppy duel. The Titan also hands you 5 coins when you lose, because he is generous like that.
+- **19 worlds**, including four new floats: Ring of Shards (drifting rock archipelago), Twinveil Falls (a sister isle and light-bridge), The World Tree and Eye of the Maelstrom (premium realms with their own sky, weather and ambient FX).
 - Drag to orbit, scroll to zoom.
 - Men move diagonally forward; jumps capture and are **forced**, chains must be completed; reach the far rank to crown a King (moves in all diagonals; crowning mid-chain ends the turn).
 - Win by capturing everything or blocking all legal moves. Online duels run a 45 s turn timer (or a chess clock if you pick one); the Daily Gauntlet's *Blazing* round gives you 15 s.
 - Emotes: keys **1–5** (or the HUD bar) — your avatar acts, the crowd cheers, and online opponents see it too.
-- **Timepieces:** every world carries its own clock on a corner table (press **C** or the ⏱ button to lift it for a full 3D inspection — free rotate on all axes, zoom, see the movement from the back; tap the bells of *The Skeleton Bell* to ring them). Choose any clock in **Marketplace → Clocks**; "World Default" gives each of the 15 realms its own style (duskhold's bespoke brass skeleton-bell with live gear train, sweeping hands, alarm hand and toggleable digital display, lantern-vale's flip clock, voidgarden's holographic orrery…).
+- **Timepieces:** every world carries its own clock on a corner table. **Click the clock itself** (or press **C**, or the ⏱ button) to lift it into a full-3D inspection — free rotate on all axes, zoom, see the movement from the back; tap the bells of *The Skeleton Bell* to ring them. Choose any clock in **Marketplace → Clocks**; "World Default" gives each of the 19 realms its own style (duskhold's bespoke brass skeleton-bell with live gear train, sweeping hands, alarm hand and toggleable digital display, lantern-vale's flip clock, voidgarden's holographic orrery…).
 - **Board sets:** Marketplace → Boards — swap the arena surface: default stone, Noir & Gold, Carrara Marble, or the premium **Mirrorglass Table** (real transmissive glass tiles with chrome frame; pairs with the Prism Glass piece skin).
 - Full rules are in-game under **How to Play**.
 
@@ -96,7 +98,7 @@ js/world.js     three.js scene: island, board, FX, picking, skins, victory dance
 js/actors.js    avatars (hand rigs, emotes, 6 looks) + reactive seeded crowd
 js/pieces.js    piece/crown meshes + cosmetic skin materials
 js/net.js       transports: BroadcastChannel + WebRTC (codes, duel links)
-js/ai.js        Storm AI: negamax, 4 levels, personalities + taunt lines
+js/ai.js        Storm AI: negamax, 5 levels (incl. QuantKing's titan) + personalities/taunts
 js/clock.js     time controls (blitz/rapid/bullet) with increments + flag-fall
 js/clocks.js    8 procedural clock styles (incl. the Skeleton Bell alarm) + per-world assignment
 js/puzzles.js   daily capture-chain puzzles (engine-verified, unique solution)
@@ -104,7 +106,7 @@ js/gauntlet.js  daily 5-round gauntlet: blazing / attrition / king's-rush modifi
 js/replay.js    deterministic replay codes + viewer
 js/economy.js   coins, purchases, sandbox checkout seam, battle pass, wagers
 js/cosmetics.js skin catalog, unlocks, loadout (persisted)
-js/themes.js    15 world themes; locked realm packs sold in the marketplace
+js/themes.js    19 world themes; locked realm packs sold in the marketplace
 js/srv.js       Supabase: auth, ladder, invites, spectate streams (optional)
 js/main.js      game controller, lobbies, clocks, chat, spectating, UI
 js/audio.js     WebAudio synth SFX · js/tween.js animation

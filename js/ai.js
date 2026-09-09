@@ -5,6 +5,7 @@ export const LEVELS={
   medium:{depth:3,time:160,noise:40},
   hard:{depth:6,time:450,noise:8},
   master:{depth:9,time:950,noise:0},
+  titan:{depth:13,time:2400,noise:0},
 };
 export const PERSONAS={
   easy:{name:'Squire Bran',style:'reckless',
@@ -27,7 +28,15 @@ export const PERSONAS={
     cap:'The storm takes what it wants.',
     loss:'You... walked through the storm. Remember this face.',
     win:'I am the last thing your strategy ever saw.'},
+  titan:{name:'QuantKing',style:'titan',
+    start:'I have solved this game a million times over. Today you get my attention — that is all you will ever get.',
+    cap:'A statistic. Nothing more.',
+    loss:'Imperfection... in ME? This board is fire. Burn well.',
+    win:'Calculate this: you were never in it. Coins are earned, not given.',
+    slip:'My guard... down? Taste this crack in the mathematics, mortal — it will not open twice.'},
 };
+export const QK={lastSlip:false};
+export function qkReset(){QK.lastSlip=false;}
 export const LEVEL_NAMES={easy:PERSONAS.easy.name,medium:PERSONAS.medium.name,hard:PERSONAS.hard.name,master:PERSONAS.master.name};
 
 export function taunt(level,evt){
@@ -77,7 +86,7 @@ function negamax(s,depth,alpha,beta,deadline,tick){
   return best;
 }
 
-export function chooseMove(state,level){
+export function chooseMove(state,level,opts){
   const moves=legalMoves(state);
   if(!moves.length)return null;
   const cfg=LEVELS[level]||LEVELS.medium;
@@ -102,7 +111,31 @@ export function chooseMove(state,level){
       if(tick.n>300000)break;
     }
   }catch(e){}
+  if(level==='titan'){
+    const mv=titanPick(pool,opts||{});
+    return mv||bestList[Math.random()*bestList.length|0].mv;
+  }
   return stylish(pool,level)||bestList[Math.random()*bestList.length|0].mv;
+}
+
+function titanPick(pool,opts){
+  QK.lastSlip=false;
+  if(pool.length<2)return pool[0].mv;
+  const best=pool[0].v;
+  const lead=Math.max(0,best);
+  let p=.01;
+  if(lead>320)p=.08;
+  else if(lead>160)p=.045;
+  else if(lead>60)p=.02;
+  const force=!!opts.forceSlip;
+  if(!force&&Math.random()>p)return pool[0].mv;
+  let drops=pool.filter(x=>x.v<=best-45&&x.v>=best-300);
+  if(!drops.length)drops=pool.filter(x=>x.v<=best-30);
+  if(!drops.length)drops=pool.slice(1,Math.min(4,pool.length));
+  if(!drops.length)return pool[0].mv;
+  const mv=drops[Math.random()*drops.length|0].mv;
+  QK.lastSlip=true;
+  return mv;
 }
 
 function stylish(pool,level){

@@ -25,6 +25,8 @@ export const THEMEPACKS={
   saltflats:{name:'The Salt Flats',price:400},
   bloodmoon:{name:'Bloodmoon Rise',price:500},
   lantern:{name:'Lantern Vale',price:500},
+  worldtree:{name:'The World Tree',price:600},
+  maelstrom:{name:'Eye of the Maelstrom',price:900,cash:5.99},
 };
 export const BOARDS={
   island:{name:'Skyhold Classic',price:0},

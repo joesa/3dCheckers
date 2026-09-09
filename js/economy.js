@@ -6,7 +6,7 @@ export function getWallet(){
     const w=JSON.parse(localStorage.getItem(KEY)||'null');
     if(w&&typeof w.coins==='number')return w;
   }catch(e){}
-  return {coins:300,ledger:[],purchases:[],premium:false,passXp:0,passClaimed:[],passSeason:'s1'};
+  return {coins:300,ledger:[],purchases:[],premium:false,passXp:0,passClaimed:[],passSeason:'s1',lastLogin:0};
 }
 export function saveWallet(w){try{localStorage.setItem(KEY,JSON.stringify(w));}catch(e){}}
 
@@ -36,6 +36,7 @@ function grant(itemId,reason){
   w.ledger.push({t:Date.now(),n:0,reason:'GRANT:'+itemId+' via '+reason});
   saveWallet(w);
 }
+export function grantItem(itemId,reason){grant(itemId,reason||'reward');}
 export async function purchase(itemId,price,paidWith){
   if(owns(itemId))return true;
   if(paidWith==='cash'){
@@ -116,6 +117,18 @@ export function claimPass(tierIdx){
   if(p.reward.startsWith('coins:'))addCoins(parseInt(p.reward.slice(6),10),'pass');
   else grant(p.reward,'pass');
   return {ok:true,reward:p.reward};
+}
+
+/* ---------- daily login bonus ---------- */
+export function getDailyBonus(){
+  const w=getWallet();
+  const today=dayKey();
+  if(w.lastLogin===today)return 0;
+  const bonus=50+Math.min(5,w.purchases.length)*10;
+  addCoins(bonus,'daily-login');
+  w.lastLogin=today;
+  saveWallet(w);
+  return bonus;
 }
 
 /* ---------- wagers ---------- */

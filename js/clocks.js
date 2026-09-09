@@ -655,6 +655,7 @@ export const THEME_CLOCKS={
   umbra:'wallround',amberwaste:'hourglass','coral-deep':'wallround',stormmoot:'tower',
   sakura:'mantel',voidgarden:'orbital',foundry:'wallround',lantern:'flip',
   bloodmoon:'tower',hollow:'hourglass',saltflats:'wallround',
+  shardring:'orbital',twinfall:'hourglass',worldtree:'sundial',maelstrom:'tower',
 };
 
 export function makeClock(styleId,themeOpts){

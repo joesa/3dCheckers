@@ -1,10 +1,7 @@
+import {CONFIG} from './config.js';
+
 /* Supabase backend: accounts, ELO ladder, invite links, spectating.
    Everything degrades gracefully when offline — the game never blocks on it. */
-
-export const SRV_URL=(location.hostname==='127.0.0.1'||location.hostname==='localhost')
-  ?'http://127.0.0.1:54321'
-  :'http://'+location.hostname+':54321';
-const SRV_ANON='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0';
 
 export const SRV={ok:false,me:null,profile:null,oppUid:null};
 let sb=null,meCb=null;
@@ -14,7 +11,7 @@ const EMAIL=h=>h.toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@aether.local';
 export async function srvInit(){
   try{
     const mod=await import('https://esm.sh/@supabase/supabase-js@2.45.0');
-    sb=mod.createClient(SRV_URL,SRV_ANON,{auth:{persistSession:true,autoRefreshToken:true}});
+    sb=mod.createClient(CONFIG.SRV_URL,CONFIG.SRV_ANON,{auth:{persistSession:true,autoRefreshToken:true}});
     SRV.ok=true;
     const {data}=await sb.auth.getSession();
     if(data&&data.session){

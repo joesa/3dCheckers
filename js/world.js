@@ -597,6 +597,14 @@ export function createWorld(canvas,initialTheme){
     const dx=ev.clientX-downPos[0],dy=ev.clientY-downPos[1];
     downPos=null;
     if(dx*dx+dy*dy>36)return;
+    const rect=canvas.getBoundingClientRect();
+    ptr.x=((ev.clientX-rect.left)/rect.width)*2-1;
+    ptr.y=-((ev.clientY-rect.top)/rect.height)*2+1;
+    raycaster.setFromCamera(ptr,camera);
+    if(envNook){
+      const hits=raycaster.intersectObject(envNook,true);
+      if(hits.length){enterClockInspect();return;}
+    }
     const sq=pick(ev);
     if(sq&&pickCb)pickCb(sq);
   });
@@ -681,6 +689,7 @@ export function createWorld(canvas,initialTheme){
     moonCore.material.color.setHex(T.moon);
     makeFX(T.fx);
     lightning=!!T.lightning;
+    setEnvDecor(T.env||'classic');
     if(envNook)setEnvironmentClock();
     if(boardSetId!=='island')applyBoardSet(boardSetId);
     return curTheme;
@@ -689,7 +698,7 @@ export function createWorld(canvas,initialTheme){
   /* ---------------- clock nook · board sets · timepiece inspector ---------------- */
   let envNook=null,envClock=null,clockStylePref='auto',digitalPref=true,strikeCb=null;
   let boardSetId='island',glassMats=null,glassEnvTex=null;
-  let inspect=null;
+  let inspect=null,inspectOpenCb=null;
 
   function getGlassEnv(){
     if(!glassEnvTex){
@@ -800,8 +809,13 @@ export function createWorld(canvas,initialTheme){
     clock.setDigital(digitalPref);
     envNook=new THREE.Group();
     envNook.add(makeSideTable());
+    const sc=id==='tower'?.8:(id==='bell'?1.55:1.2);
+    clock.group.scale.setScalar(sc);
     clock.group.position.set(0,.66,0);
     envNook.add(clock.group);
+    envNook.updateWorldMatrix(true,true);
+    const cbox=new THREE.Box3().setFromObject(clock.group);
+    clock.group.position.y+=(.63-cbox.min.y);
     envNook.position.copy(CLOCK_POS);
     envNook.rotation.y=.46;
     scene.add(envNook);
@@ -826,7 +840,7 @@ export function createWorld(canvas,initialTheme){
     obj.position.copy(wp.sub(center));
     obj.quaternion.copy(wq);
     obj.scale.copy(ws);
-    inspect={pivot,obj,center,radius,dist:radius*2.7,drag:null,
+    inspect={pivot,obj,center,radius,dist:radius*1.9,drag:null,
       saved:{pos:camera.position.clone(),target:controls.target.clone(),minD:controls.minDistance},
       orig};
     controls.enabled=false;
@@ -838,6 +852,7 @@ export function createWorld(canvas,initialTheme){
     camera.position.copy(center).addScaledVector(dir,inspect.dist);
     camera.lookAt(center);
     canvas.style.cursor='grab';
+    if(inspectOpenCb)inspectOpenCb(true);
     return true;
   }
   function exitClockInspect(){
@@ -855,6 +870,7 @@ export function createWorld(canvas,initialTheme){
     controls.enabled=true;
     canvas.style.cursor='default';
     inspect=null;
+    if(inspectOpenCb)inspectOpenCb(false);
   }
   function inspectMove(ev){
     const d=inspect.drag;
@@ -884,6 +900,107 @@ export function createWorld(canvas,initialTheme){
     camera.position.copy(inspect.center).addScaledVector(dir,inspect.dist);
   },{passive:true});
 
+  /* ---------------- environment decor variants ---------------- */
+  const envGroups={},envAnims=[];
+  function setEnvDecor(style){
+    const key=style||'classic';
+    for(const k in envGroups)envGroups[k].visible=(k===key);
+    if(key==='classic')return;
+    if(!envGroups[key]){
+      envGroups[key]=buildEnv(key);
+      scene.add(envGroups[key]);
+    }
+    envGroups[key].visible=true;
+  }
+  function buildEnv(style){
+    const g=new THREE.Group();
+    if(style==='shards'){
+      const geos=[
+        new THREE.DodecahedronGeometry(.55,0),
+        new THREE.DodecahedronGeometry(.85,0),
+        new THREE.OctahedronGeometry(.65,0)];
+      for(let i=0;i<12;i++){
+        const m=new THREE.Mesh(geos[i%3],platMat);
+        const a=i/12*Math.PI*2+.3;
+        const rad=9.6+(i%4)*1.3;
+        const y0=1+(i%5)*.75;
+        m.position.set(Math.cos(a)*rad,y0,Math.sin(a)*rad);
+        m.rotation.set(i*1.3,i*.7,i*.4);
+        m.castShadow=false;
+        g.add(m);
+        envAnims.push((t)=>{
+          m.position.y=y0+Math.sin(t*.6+i)*.35;
+          m.rotation.y+=.0015;
+          m.rotation.x+=.0008;
+        });
+      }
+      envAnims.push((t,dt)=>{g.rotation.y+=dt*.02;});
+    }else if(style==='twin'){
+      const isle=new THREE.Mesh(new THREE.ConeGeometry(2.5,3,9),rockMat);
+      isle.position.set(11.6,-1.3,-3.6);
+      g.add(isle);
+      const top=new THREE.Mesh(new THREE.CylinderGeometry(2.2,2.4,.3,9),grassMat);
+      top.position.set(11.6,.32,-3.6);
+      g.add(top);
+      for(const[tx,tz,ts]of[[12.4,-3,.5],[11,-4.2,.35]]){
+        const spire=new THREE.Mesh(new THREE.ConeGeometry(.28,ts*2.2,6),frameMat);
+        spire.position.set(tx,.4+ts,tz);
+        g.add(spire);
+      }
+      const bridge=new THREE.Mesh(new THREE.BoxGeometry(4.9,.05,.85),
+        new THREE.MeshBasicMaterial({color:0x9fd8e8,transparent:true,opacity:.3,
+          blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+      bridge.position.set(7.9,.5,-4.4);
+      bridge.rotation.y=.34;bridge.rotation.z=-.06;
+      g.add(bridge);
+      const fallM=new THREE.MeshBasicMaterial({color:0xaee0ec,transparent:true,opacity:.4,
+        blending:THREE.AdditiveBlending,depthWrite:false,fog:false});
+      const fall=new THREE.Mesh(new THREE.PlaneGeometry(.8,3.4),fallM);
+      fall.position.set(13.3,-1.4,-3.1);
+      fall.rotation.y=.6;
+      g.add(fall);
+      envAnims.push(t=>{fallM.opacity=.3+.14*Math.sin(t*3.2);});
+    }else if(style==='tree'){
+      const trunk=new THREE.Mesh(new THREE.CylinderGeometry(1.1,2.6,8,10),rockMat);
+      trunk.position.set(-8.4,-3.4,-8.4);
+      g.add(trunk);
+      for(let i=0;i<4;i++){
+        const a=i/4*Math.PI*2+.6;
+        const root=new THREE.Mesh(new THREE.BoxGeometry(.6,.5,3.6),rockMat);
+        root.position.set(-8.4+Math.cos(a)*1.9,-.6,-8.4+Math.sin(a)*1.9);
+        root.rotation.y=a;root.rotation.x=.5;
+        g.add(root);
+      }
+      const canopy=[[0,2.2,0,2.9],[1.6,1.4,.8,1.9],[-1.5,1.6,-.6,2.1],[.3,1.5,-1.7,1.7]];
+      for(const[ox,oy,oz,r]of canopy){
+        const leafB=new THREE.Mesh(new THREE.IcosahedronGeometry(r,1),leafMat);
+        leafB.position.set(-8.4+ox,oy+2.4,-8.4+oz);
+        g.add(leafB);
+      }
+      const vine=new THREE.Mesh(new THREE.CylinderGeometry(.05,.05,4.4,6),leafMat);
+      vine.position.set(-6.1,.6,-6.1);
+      vine.rotation.z=.18;
+      g.add(vine);
+      envAnims.push(t=>{g.children.forEach((c,i)=>{if(i>5)c.position.y+=Math.sin(t+i)*.0006;});});
+    }else if(style==='vortex'){
+      const rings=[];
+      for(let i=0;i<5;i++){
+        const ring=new THREE.Mesh(new THREE.TorusGeometry(7.4+i*1.6,.1+i*.03,8,64),
+          new THREE.MeshBasicMaterial({color:0x4a5e96,transparent:true,opacity:.15,
+            blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+        ring.rotation.x=Math.PI/2+.06*i;
+        ring.position.y=.8+i*.6;
+        g.add(ring);
+        rings.push(ring);
+      }
+      envAnims.push((t,dt)=>{
+        rings.forEach((r,i)=>{r.rotation.z+=dt*(.12+.05*i)*(i%2?1:-1);});
+        g.rotation.y+=dt*.03;
+      });
+    }
+    return g;
+  }
+
   applyTheme(initialTheme||DEFAULT_THEME);
 
   /* ---------------- loop ---------------- */
@@ -899,6 +1016,7 @@ export function createWorld(canvas,initialTheme){
 
     stepTweens(dt);
     if(envClock)envClock.update(dt);
+    for(const fn of envAnims)fn(time,dt);
     controls.update();
 
     stars.rotation.y+=dt*.004;
@@ -1020,6 +1138,7 @@ export function createWorld(canvas,initialTheme){
     clockStyle(){return clockStylePref==='auto'?(THEME_CLOCKS[curTheme]||'wallround'):clockStylePref;},
     setClockDigital(on){digitalPref=!!on;if(envClock)envClock.setDigital(!!on);},
     onClockStrike(cb){strikeCb=cb;if(envClock)envClock.onStrike=cb;},
+    onInspectChange(cb){inspectOpenCb=cb;},
     removeObject(o){scene.remove(o);},
     makeGroup(x=0,y=0,z=0){const g=new THREE.Group();g.position.set(x,y,z);scene.add(g);return g;},
     sqToVec(sq,y){return sq3(sq,y===undefined?TOP_Y:y);},
