@@ -2,7 +2,7 @@
 import {SRV,srvInit,onMeChange,signUp as srvSignUp,signIn as srvSignIn,signOut as srvSignOut,reportMatch as srvReportMatch,ladder as srvLadder} from './srv.js';
 import {signUp as localSignUp,signIn as localSignIn,signOut as localSignOut,reportMatch as localReportMatch,ladder as localLadder,getLocalUser} from './localauth.js';
 
-export const Auth={ok:false,me:null,profile:null};
+export const Auth={ok:false,me:null,profile:null,init};
 
 async function init(){
   // Try Supabase first
