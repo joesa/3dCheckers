@@ -12,8 +12,7 @@ import {GAUNTLET_ROUNDS,rollDaily,gauntletState,saveGauntlet,roundReward,clearRe
 import {buildCode,parseCode,openViewer} from './replay.js';
 import * as ECO from './economy.js';
 import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog} from './cosmetics.js';
-import {SRV,srvInit,onMeChange,signUp,signIn,signOut,reportMatch,ladder,
-  createInvite,getInvite,patchInvite,newCode as srvNewCode,pushMove,getMoves,react as srvReact,getReactions} from './srv.js';
+import {Auth,signUp as authSignUp,signIn as authSignIn,signOut as authSignOut,reportMatch as authReportMatch,ladder as authLadder} from './auth.js';
 
 const $=s=>document.querySelector(s);
 const show=(el,on)=>el.classList.toggle('hidden',!on);
@@ -26,9 +25,8 @@ const MYNAME=ADJ[Math.random()*ADJ.length|0]+' '+NOUN[Math.random()*NOUN.length|
 function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 
-const EQ=getEquip();
-setSkin(EQ.skin,(SKINS[EQ.skin]||SKINS.default).params||{});
-const world=createWorld($('#gl'),lsGet('ad-theme')||DEFAULT_THEME);
+// Initialize auth on boot
+Auth.init();
 
 const chatLastSend={last:0,throttle:1500};
 function throttledChat(text){
@@ -1452,7 +1450,6 @@ function updateAuthUI(){
 onMeChange(updateAuthUI);
 
 function openAuth(){
-  if(SRV.ok&&SRV.me){signOut().then(()=>toast('Signed out \u2014 the skies stay'));return;}
   if(!SRV.ok){toast('Backend offline \u2014 start the Supabase stack to sign in');return;}
   $('#auth-status').textContent='';
   $('#auth-status').className='status';
@@ -1475,14 +1472,14 @@ async function authDo(fn){
   }
 }
 $('#b-auth').onclick=()=>{sfx.click();openAuth();};
-$('#b-auth-signin').onclick=()=>{sfx.click();authDo(signIn);};
-$('#b-auth-signup').onclick=()=>{sfx.click();authDo(signUp);};
+$('#b-auth-signin').onclick=()=>{sfx.click();authDo(authSignIn);};
+$('#b-auth-signup').onclick=()=>{sfx.click();authDo(authSignUp);};
 $('#b-auth-off').onclick=()=>{sfx.click();show($('#auth'),false);if(!G.started)show($('#menu'),true);};
 
 async function openLadder(){
-  if(!SRV.ok){toast('Ladder offline \u2014 backend unreachable');return;}
-  const rows=await ladder(60);
-  const meH=SRV.profile?SRV.profile.handle:null;
+  if(!Auth.ok){toast('Ladder offline \u2014 backend unreachable');return;}
+  const rows=await authLadder(60);
+  const meH=Auth.profile?Auth.profile.handle:null;
   $('#ladder-body').innerHTML=rows.map((r,i)=>
     '<tr'+(r.handle===meH?' style="color:var(--gold)"':'')+'><td>'+(i+1)+'</td><td>'+r.handle+'</td><td>'+r.elo+'</td><td>'+r.wins+'/'+r.losses+'</td></tr>'
   ).join('')||'<tr><td colspan="4">No rated duels yet \u2014 be the first.</td></tr>';
@@ -1519,7 +1516,7 @@ async function createWatch(){
 }
 $('#btn-watch').onclick=async()=>{
   sfx.click();
-  if(!SRV.ok){toast('Spectating needs the backend');return;}
+  if(!Auth.ok){toast('Spectating needs the backend');return;}
   if(G.mode==='host')await createWatch();
   else if(G.mode==='guest'){G.transport.send({t:'watchreq'});toast('Asked the host for a spectator pass\u2026');}
 };
