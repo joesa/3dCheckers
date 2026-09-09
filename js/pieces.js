@@ -9,11 +9,26 @@ const geoCache={},matCache={};
 const geo=(k,f)=>geoCache[k]||(geoCache[k]=f());
 const mat=(k,f)=>matCache[k]||(matCache[k]=f());
 
+let skinParams=null,skinKey='default';
+export function setSkin(key,params){skinKey=key;skinParams=params||{};}
+
+function applySkin(base,o){
+  if(!o)return base;
+  const m={...base};
+  if(o.roughness!==undefined)m.roughness=o.roughness;
+  if(o.metalness!==undefined)m.metalness=o.metalness;
+  if(o.transparent)m.transparent=true;
+  if(o.opacity!==undefined)m.opacity=o.opacity;
+  return m;
+}
+
 function teamMats(color){
   const C=TEAM_COLORS[color];
+  const sp=skinParams||{};
+  const eb=sp.emissiveBoost||1;
   return {
-    body:mat(color+'-body',()=>new THREE.MeshStandardMaterial({color:C.body,roughness:.42,metalness:.28,emissive:C.glow,emissiveIntensity:.14})),
-    dark:mat(color+'-dark',()=>new THREE.MeshStandardMaterial({color:C.dark,roughness:.55,metalness:.2})),
+    body:mat(color+'-body-'+skinKey,()=>new THREE.MeshStandardMaterial({...applySkin({color:C.body,roughness:.42,metalness:.28},sp.body),emissive:C.glow,emissiveIntensity:Math.min(1,.14*(1+(sp.glow||0)*3)*eb)})),
+    dark:mat(color+'-dark-'+skinKey,()=>new THREE.MeshStandardMaterial(applySkin({color:C.dark,roughness:.55,metalness:.2},sp.dark))),
   };
 }
 

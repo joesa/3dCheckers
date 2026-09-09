@@ -173,6 +173,64 @@ label{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1p
 @media (max-width:640px){.th-grid{grid-template-columns:repeat(2,1fr)}}
 
 ::-webkit-scrollbar{width:8px;height:8px}
+
+/* ---------- clocks ---------- */
+#clocks{display:flex;gap:6px;align-items:center;justify-content:center;margin-top:6px;font-family:'Orbitron',sans-serif;font-size:15px;letter-spacing:1px}
+.clk{padding:2px 8px;border-radius:6px;background:rgba(10,8,26,.6);border:1px solid rgba(255,255,255,.08)}
+.clk.red{color:var(--ember)}
+.clk.black{color:var(--frost)}
+.clk.live{border-color:rgba(255,255,255,.45);box-shadow:0 0 10px rgba(180,200,255,.25)}
+.clk.low{color:#ff4a4a;animation:clkpulse .8s infinite}
+@keyframes clkpulse{50%{background:rgba(255,60,60,.25)}}
+.clksep{opacity:.5}
+
+/* ---------- banners / wallet / taunt ---------- */
+#mode-banner{margin-top:6px;font-family:var(--font-ui);font-size:12px;letter-spacing:1.5px;color:var(--gold);text-transform:uppercase}
+#wallet-chip{position:absolute;top:12px;right:12px;padding:7px 14px;border-radius:20px;font-family:var(--font-ui);font-size:14px;color:var(--gold)}
+#taunt{position:absolute;top:15%;left:50%;transform:translateX(-50%);max-width:440px;padding:10px 20px;border-radius:14px;background:rgba(12,8,30,.85);border:1px solid rgba(255,215,94,.35);color:#f0e2b8;font-family:var(--font-ui);font-size:16px;text-align:center;animation:tauntin .3s ease}
+@keyframes tauntin{from{opacity:0;transform:translateX(-50%) translateY(-8px)}to{opacity:1}}
+
+/* ---------- emotes ---------- */
+#emote-bar{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);display:flex;gap:8px}
+.emote{width:42px;height:42px;border-radius:10px;border:1px solid var(--edge);background:rgba(20,14,44,.75);font-size:19px;cursor:pointer;transition:transform .12s,background .12s}
+.emote:hover{transform:translateY(-3px);background:rgba(60,46,120,.8)}
+
+/* ---------- menu extras ---------- */
+.menu-row2{display:flex;gap:8px;flex-wrap:wrap}
+.btn.small{flex:1;padding:9px 8px;font-size:13px}
+.profile-line{margin-top:12px;text-align:center;font-family:var(--font-ui);font-size:13px;color:#c8bfa8}
+.profile-line b{color:var(--gold)}
+
+/* ---------- shop ---------- */
+.shop-panel{max-height:82vh;overflow:auto;width:min(680px,94vw)}
+.shop-wallet{float:right;font-size:15px;color:var(--gold)}
+.shop-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px}
+.shop-tabs button{padding:7px 13px;border-radius:16px;border:1px solid var(--edge);background:rgba(20,14,44,.6);color:#cfc6e8;font-family:var(--font-ui);font-size:13px;cursor:pointer}
+.shop-tabs button.on{border-color:var(--gold);color:var(--gold)}
+.shop-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
+.shop-card{border:1px solid var(--edge);border-radius:12px;padding:12px;background:rgba(24,16,52,.55);display:flex;flex-direction:column;gap:8px}
+.shop-card h4{margin:0;font-family:var(--font-title);font-size:15px;color:#efe8d0}
+.shop-card .desc{font-size:12px;color:#9a92b8;flex:1}
+.shop-card .price{font-size:13px;color:var(--gold)}
+.shop-card button{padding:7px;border-radius:8px;border:1px solid var(--edge);background:rgba(64,48,130,.55);color:#fff;font-family:var(--font-ui);cursor:pointer}
+.shop-card button:disabled{opacity:.45;cursor:default}
+.shop-card button.owned{border-color:#59c98a;color:#59c98a}
+.shop-card button.equipped{border-color:var(--gold);color:var(--gold)}
+.pass-lvl{margin:4px 0 10px;font-family:var(--font-ui);font-size:13px;color:#cfc6e8}
+.pass-bar{height:8px;border-radius:4px;background:rgba(255,255,255,.08);overflow:hidden}
+.pass-bar>div{height:100%;background:linear-gradient(90deg,#8a5cff,#ffd75e)}
+
+/* ---------- ladder ---------- */
+#ladder-table{width:100%;border-collapse:collapse;font-family:var(--font-ui);font-size:14px}
+#ladder-table th,#ladder-table td{padding:6px 8px;text-align:left;border-bottom:1px solid rgba(255,255,255,.06)}
+#ladder-table th{color:#9a92b8;font-weight:600;font-size:12px;text-transform:uppercase;letter-spacing:1px}
+
+/* ---------- spectate ---------- */
+#spectate-bar{position:absolute;bottom:18px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:14px;padding:8px 16px;border-radius:14px;font-family:var(--font-ui);letter-spacing:1px}
+#spec-reactions{display:flex;gap:6px}
+.speed-l{font-family:var(--font-ui);font-size:13px;color:#cfc6e8}
+.speed-l select{width:auto;padding:4px 8px}
+#rp-track{width:100%;margin:12px 0}
 ::-webkit-scrollbar-thumb{background:rgba(130,140,255,.3);border-radius:4px}
 ::-webkit-scrollbar-track{background:transparent}
 

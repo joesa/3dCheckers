@@ -27,7 +27,15 @@
     <div id="turn-emblem"></div>
     <div id="turn-text">…</div>
     <div id="timer-wrap" class="hidden"><div id="timer-bar"></div></div>
+    <div id="clocks" class="hidden">
+      <span id="clk-red" class="clk red">0:00</span><span class="clksep">·</span><span id="clk-black" class="clk black">0:00</span>
+    </div>
+    <div id="mode-banner" class="hidden"></div>
   </div>
+
+  <div id="taunt" class="hidden"></div>
+
+  <div id="wallet-chip" class="glass hidden">◈ <b id="wallet-amt">0</b></div>
 
   <div id="log-panel" class="glass">
     <h3>Battle Log</h3>
@@ -40,10 +48,21 @@
     <div class="cap-row"><span class="cap-label ember-l">Ember</span><div id="cap-red" class="pips"></div></div>
   </div>
 
+  <div id="emote-bar" class="hidden">
+    <button class="emote" data-e="wave" title="Wave (1)">✋</button>
+    <button class="emote" data-e="point" title="Point (2)">👉</button>
+    <button class="emote" data-e="laugh" title="Laugh (3)">😈</button>
+    <button class="emote" data-e="bow" title="Bow (4)">🙇</button>
+    <button class="emote" data-e="taunt" title="Taunt (5)">👑</button>
+  </div>
+
   <div id="side-btns">
     <button id="btn-resign" class="btn danger">Resign</button>
     <button id="btn-rematch" class="btn">Rematch</button>
     <button id="btn-theme" class="btn tiny" title="Change your world">Worlds</button>
+    <button id="btn-wager" class="btn tiny hidden" title="Wager coins on this duel">Wager</button>
+    <button id="btn-watch" class="btn tiny hidden" title="Create spectator link">Watch</button>
+    <button id="btn-shop-hud" class="btn tiny" title="Marketplace">◈</button>
     <button id="btn-sound" class="btn tiny" title="Toggle sound">♪</button>
     <button id="btn-quit" class="btn tiny" title="Back to menu">⌂</button>
   </div>
@@ -65,10 +84,19 @@
     <div class="menu-btns">
       <button class="btn primary" id="b-hotseat">Pass &amp; Play</button>
       <button class="btn" id="b-ai">Play vs Storm (Solo)</button>
+      <button class="btn" id="b-puzzle">Daily Puzzle</button>
+      <button class="btn" id="b-gauntlet">Daily Gauntlet</button>
       <button class="btn" id="b-online">Online Duel (WebRTC)</button>
       <button class="btn" id="b-local">Same-Browser Tabs</button>
+      <div class="menu-row2">
+        <button class="btn small" id="b-shop">Marketplace</button>
+        <button class="btn small" id="b-ladder">Ladder</button>
+        <button class="btn small" id="b-replay">Watch Replay</button>
+        <button class="btn small" id="b-auth">Sign In</button>
+      </div>
       <button class="btn ghost" id="b-howto">How to Play</button>
     </div>
+    <div class="profile-line hidden" id="profile-line"></div>
     <div id="lobby" class="hidden"></div>
   </div>
 </div>
@@ -109,6 +137,7 @@
     <p id="result-sub"></p>
     <div class="menu-btns">
       <button id="b-rematch2" class="btn primary">Rematch</button>
+      <button id="b-replay-code" class="btn hidden">Copy Replay Code</button>
       <button id="b-back" class="btn">Main Menu</button>
     </div>
   </div>
@@ -120,6 +149,105 @@
     <p class="tag">Choose the realm around you. Your opponent and the spectators may sit in different worlds — the board, the duel, and every move are shared.</p>
     <div class="th-grid" id="theme-grid"></div>
     <div class="menu-btns"><button id="b-themes-close" class="btn primary">Done</button></div>
+  </div>
+</div>
+
+<div id="replay" class="overlay hidden">
+  <div class="panel glass center">
+    <h2>Duel Replay</h2>
+    <div id="rp-info">0 / 0</div>
+    <input type="range" id="rp-track" min="0" max="0" value="0" disabled/>
+    <div class="menu-row2">
+      <button class="btn tiny" id="rp-back">⏮ Back</button>
+      <button class="btn" id="rp-play">▶</button>
+      <button class="btn tiny" id="rp-step">⏭ Step</button>
+      <label class="speed-l">Speed <select id="rp-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="3">3×</option></select></label>
+    </div>
+    <div class="menu-btns"><button class="btn primary" id="rp-close">Close</button></div>
+  </div>
+</div>
+
+<div id="dialog" class="overlay hidden">
+  <div class="panel glass">
+    <h2 id="dlg-title"></h2>
+    <p class="tag" id="dlg-sub"></p>
+    <textarea id="dlg-input" rows="3" placeholder="Paste here…"></textarea>
+    <div class="menu-btns">
+      <button class="btn primary" id="dlg-ok">Go</button>
+      <button class="btn" id="dlg-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="shop" class="overlay hidden">
+  <div class="panel glass shop-panel">
+    <h2>Marketplace <span class="shop-wallet">◈ <b id="shop-coins">0</b></span></h2>
+    <div class="shop-tabs" id="shop-tabs"></div>
+    <div class="shop-grid" id="shop-grid"></div>
+    <div class="menu-btns">
+      <button class="btn tiny" id="b-topup">＋ Coin Top-up</button>
+      <button class="btn tiny" id="b-pass-premium">Premium Pass</button>
+      <button class="btn primary" id="b-shop-close">Done</button>
+    </div>
+  </div>
+</div>
+
+<div id="checkout" class="overlay hidden">
+  <div class="panel glass center">
+    <h2>Sandbox Checkout</h2>
+    <p class="tag">This stand-in replaces Stripe until live billing is enabled. No real charge occurs.</p>
+    <p><b id="co-item"></b></p>
+    <p id="co-amt" class="ember-l"></p>
+    <div class="menu-btns">
+      <button class="btn primary" id="co-buy">Confirm</button>
+      <button class="btn" id="co-cancel">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="pzend" class="overlay hidden">
+  <div class="panel glass center">
+    <h2 id="pz-title"></h2>
+    <p id="pz-sub"></p>
+    <div class="menu-btns">
+      <button class="btn primary" id="pz-btn">Continue</button>
+    </div>
+  </div>
+</div>
+
+<div id="ladder" class="overlay hidden">
+  <div class="panel glass">
+    <h2>Great Ladder</h2>
+    <p class="tag" id="ladder-sub">Season I — Storm Rising</p>
+    <table id="ladder-table"><thead><tr><th>#</th><th>Duelist</th><th>Elo</th><th>W/L</th></tr></thead><tbody id="ladder-body"></tbody></table>
+    <div class="menu-btns"><button class="btn primary" id="b-ladder-close">Close</button></div>
+  </div>
+</div>
+
+<div id="auth" class="overlay hidden">
+  <div class="panel glass">
+    <h2 id="auth-title">Duelist Identity</h2>
+    <p class="tag" id="auth-sub">Sign in to climb the Great Ladder, keep cosmetics across devices, and challenge by nickname. Without an account everything still plays — ranked features stay off.</p>
+    <label>Handle</label>
+    <input type="text" id="auth-handle" maxlength="18" placeholder="StormRider"/>
+    <label>Password</label>
+    <input type="password" id="auth-pass" maxlength="64" placeholder="••••••••"/>
+    <div class="status" id="auth-status"></div>
+    <div class="menu-btns">
+      <button class="btn primary" id="b-auth-signin">Sign In</button>
+      <button class="btn" id="b-auth-signup">Create</button>
+      <button class="btn ghost" id="b-auth-off">Play Incognito</button>
+    </div>
+  </div>
+</div>
+
+<div id="spectate-bar" class="glass hidden">
+  <span>Spectating</span>
+  <div id="spec-reactions">
+    <button class="emote" data-r="ooo">😮</button>
+    <button class="emote" data-r="haha">😂</button>
+    <button class="emote" data-r="gg">🤝</button>
+    <button class="emote" data-r="storm">🌩️</button>
   </div>
 </div>
 

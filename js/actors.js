@@ -18,7 +18,7 @@ const shift=(c,dh,ds,dl)=>{
     THREE.MathUtils.clamp(hsl.l+dl,0,1));
 };
 
-export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0){
+export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='default'){
   const rng=mulberry32(seed);
   const C=TEAM_COLORS[color];
   const group=new THREE.Group();
@@ -29,6 +29,9 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0){
   const robeMat=new THREE.MeshStandardMaterial({color:shift(C.dark,(rng()-.5)*.1,(rng()-.5)*.2,(rng()-.5)*.12),roughness:.55,metalness:.15});
   const trimMat=new THREE.MeshStandardMaterial({color:C.body,roughness:.35,metalness:.4,emissive:C.glow,emissiveIntensity:.45});
   const woodMat=new THREE.MeshStandardMaterial({color:shift(0x5b4330,(rng()-.5)*.04,0,(rng()-.5)*.1),roughness:.78});
+  if(throne==='stone'){woodMat.color.setHex(0x8f9299);woodMat.roughness=.92;woodMat.metalness=.05;}
+  else if(throne==='iron'){woodMat.color.setHex(0x40454e);woodMat.roughness=.3;woodMat.metalness=.92;}
+  else if(throne==='gilded'){woodMat.color.setHex(0xd8ab4a);woodMat.roughness=.28;woodMat.metalness=.8;woodMat.emissive.setHex(0x2e2206);woodMat.emissiveIntensity=.35;}
   const skinCol=SKINS[rng()*SKINS.length|0];
   const hairCol=HAIRS[rng()*HAIRS.length|0];
 
@@ -51,6 +54,14 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0){
     chair.add(leg);
   }
   chair.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;}});
+  if(throne==='iron'){
+    const spikeG=new THREE.ConeGeometry(.06,.24,6);
+    for(const x of[-.62,.62]){
+      const s=new THREE.Mesh(spikeG,woodMat);
+      s.position.set(x,1.55,.35);
+      chair.add(s);
+    }
+  }
   rigG.add(chair);
 
   /* body */
@@ -149,7 +160,9 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0){
   const focus=new THREE.Vector3(0,1.4,4);
   const focusTarget=new THREE.Vector3(0,1.4,4);
   const scratch=new THREE.Vector3();
+  const headBaseY=head.position.y;
   let t=rng()*10;
+  let emote=null;
 
   function toLocal(v){
     rigG.updateWorldMatrix(true,false);
@@ -157,9 +170,45 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0){
     return rigG.worldToLocal(scratch);
   }
 
+  const EMOTES={
+    wave:{dur:1.8,fn(k){
+      const up=Math.sin(Math.min(1,k/.35)*Math.PI/2);
+      hand.target.set(hand.rest.x+.15*up,hand.rest.y+1.15*up,hand.rest.z+.25*up);
+      hand.hand.rotation.z=Math.sin(k*11)*.5*up;
+    }},
+    point:{dur:1.4,fn(k){
+      const out=Math.min(1,k/.25);
+      hand.target.set(0,shoulderY+.1,.6+2.3*out);
+      offArm.target.copy(offArm.rest);
+    }},
+    laugh:{dur:1.9,fn(k){
+      head.position.y=headBaseY-Math.abs(Math.sin(k*8))*.13;
+      robe.scale.y=1-Math.abs(Math.sin(k*8))*.045;
+    }},
+    bow:{dur:1.7,fn(k){
+      const d=Math.sin(Math.min(1,k/.8)*Math.PI);
+      head.position.y=headBaseY-d*.5;
+      head.rotation.x=d*.9;
+      focusTarget.y=1.4-d;
+    }},
+    taunt:{dur:1.6,fn(k){
+      const beat=Math.abs(Math.sin(k*10));
+      hand.target.set(hand.rest.x+.5,hand.rest.y+.35+beat*.1,hand.rest.z+.9);
+      head.rotation.z=Math.sin(k*6)*.1;
+    }},
+  };
+  function endEmote(){
+    emote=null;
+    head.position.y=headBaseY;head.rotation.x=0;head.rotation.z=0;
+    focusTarget.y=1.4;robe.scale.y=1;
+    hand.hand.rotation.z=0;
+    hand.target.copy(hand.rest);
+    offArm.target.copy(offArm.rest);
+  }
+
   function update(dt){
     t+=dt;
-    robe.scale.y=1+Math.sin(t*1.8)*.02;
+    if(!emote)robe.scale.y=1+Math.sin(t*1.8)*.02;
     focus.lerp(focusTarget,1-Math.pow(.01,dt));
     head.lookAt(focus);
     for(const a of[hand,offArm]){
@@ -177,6 +226,11 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0){
         f.position.z=.05-a.grip*.055;
       }
     }
+    if(emote){
+      emote.t+=dt;
+      emote.def.fn(emote.t);
+      if(emote.t>emote.def.dur)endEmote();
+    }
   }
 
   const rig={
@@ -187,6 +241,12 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0){
     rest(){hand.target.copy(hand.rest);},
     focusOn(v){focusTarget.copy(v);},
     handWorld(){return hand.hand.getWorldPosition(new THREE.Vector3());},
+    emote(name){
+      const def=EMOTES[name];
+      if(!def||hand.grip>.5)return false;
+      emote={def,t:0};
+      return true;
+    },
   };
   return {group,update,rig};
 }
@@ -300,6 +360,7 @@ export function makeCrowd(seed=Math.random()*1e9|0){
       if(type==='capture'&&Math.random()<.45)impulse(p,.55);
       else if(type==='multi'&&Math.random()<.85)impulse(p,1.1);
       else if(type==='crown')impulse(p,.8);
+      else if(type==='cheer'&&Math.random()<.4)impulse(p,.7);
     }
   }
   function celebrate(){

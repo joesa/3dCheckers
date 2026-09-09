@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {addTween,stepTweens,easeOutBack,easeInOutQuad} from './tween.js';
-import {makePiece,addCrown,TEAM_COLORS} from './pieces.js';
+import {makePiece,addCrown,TEAM_COLORS,setSkin} from './pieces.js';
 import {THEMES,DEFAULT_THEME} from './themes.js';
 
 const TOP_Y=.05;
@@ -396,6 +396,7 @@ export function createWorld(canvas,initialTheme){
   const piecesGroup=new THREE.Group();
   scene.add(piecesGroup);
   const pieces=new Map();
+  let lastBoard=null;
   let selection=null;
 
   const selectRing=new THREE.Mesh(new THREE.RingGeometry(.4,.54,32),new THREE.MeshBasicMaterial({color:0xffd76a,transparent:true,opacity:.9,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
@@ -441,6 +442,7 @@ export function createWorld(canvas,initialTheme){
   }
 
   function syncBoard(board,stagger=false){
+    lastBoard=board;
     const need=new Map();
     for(let r=0;r<8;r++)for(let c=0;c<8;c++){
       const p=board[r][c];
@@ -528,6 +530,7 @@ export function createWorld(canvas,initialTheme){
   /* ---------------- particles ---------------- */
   const bursts=[];
   function burst(pos,color=0xffffff,n=16,spread=1){
+    if(Array.isArray(pos))pos=sq3(pos,.5);
     const geo=new THREE.BufferGeometry();
     const posArr=new Float32Array(n*3),vel=new Float32Array(n*3);
     for(let i=0;i<n;i++){
@@ -760,6 +763,32 @@ export function createWorld(canvas,initialTheme){
     onHover(cb){hoverCb=cb;},
     onFrame(cb){frameCbs.push(cb);},
     addObject(o){scene.add(o);},
+    reactBurst(hex){
+      burst(new THREE.Vector3((Math.random()-.5)*4,1,(Math.random()-.5)*4),hex,18,1.1);
+    },
+    reskin(key,params){
+      setSkin(key,params);
+      for(const[,mesh]of pieces)killPieceMesh(mesh);
+      pieces.clear();
+      if(lastBoard)syncBoard(lastBoard,false);
+    },
+    victoryDance(color,kind){
+      const meshes=[];
+      for(const[,m]of pieces)if(m.userData.color===color)meshes.push(m);
+      if(!meshes.length)return;
+      meshes.forEach((m,i)=>{
+        const y0=m.position.y;
+        addTween(1.7,tt=>{
+          const u=Math.min(1,Math.max(0,(tt-i*.06)/1.4));
+          if(kind==='corona')m.position.y=y0+Math.sin(u*Math.PI)*(1.1+.3*Math.sin(tt*8+i));
+          else m.position.y=y0+Math.sin(u*Math.PI-.6)*(1.6+.2*Math.cos(tt*10+i));
+          m.rotation.y=u*Math.PI*4;
+        },()=>{m.position.y=y0;m.rotation.y=0;});
+      });
+      for(let i=0;i<3;i++)setTimeout(()=>{
+        burst(new THREE.Vector3((Math.random()-.5)*5,1.4,(Math.random()-.5)*5),TEAM_COLORS[color].glow,26,1.3);
+      },i*280);
+    },
     get cam(){return{camera,controls,scene};},
     setTheme(id){return applyTheme(id);},
     currentTheme(){return curTheme;},

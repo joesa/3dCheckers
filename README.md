@@ -1,8 +1,10 @@
 # Aether Draughts
 
-Multiplayer 3D checkers (English draughts) on a floating sky-island. Pure HTML/CSS/JS + [three.js](https://threejs.org). No build step, no backend, no accounts.
+Multiplayer 3D checkers (English draughts) on a floating sky-island. Pure HTML/CSS/JS + [three.js](https://threejs.org). No build step. Plays fully offline/backend-free; an optional Supabase backend unlocks accounts, the ELO ladder, invite links, and spectating.
 
-**Modes:** Pass & Play · Play vs Storm (solo AI — four levels: Squire, Knight, Warlock, Storm Monarch) · Online Duel (serverless WebRTC with copy-paste invite codes) · Same-Browser Tabs.
+**Modes:** Pass & Play · Play vs Storm (solo AI — four *personalities*: Squire Bran, Knight Errant Vessa, Warlock Mordaunt, Storm Monarch Kaal) · Online Duel (serverless WebRTC — copy-paste codes **or** one-click duel links with the backend) · Same-Browser Tabs · Daily Puzzle · Daily Gauntlet (5 escalating rounds with rule-bending modifiers) · Replay viewer (shareable duel codes) · Spectator passes (live watch + emoji reactions).
+
+**Systems:** clocks (blitz/rapid/bullet with increments & flag-fall), cosmetics marketplace (piece finishes, thrones, victory dances, locked realm worlds), coin economy with a sandbox checkout (`PROVIDER` seam in `js/economy.js` — drop Stripe in there), Season battle pass (XP + free/premium tracks), coin **wagers** on online duels, emotes (keys 1–5, mirrored to the peer + crowd), and every player views the duel inside their own chosen world.
 
 ## Run locally
 
@@ -11,6 +13,24 @@ Any static file server works (WebRTC and BroadcastChannel need `http://localhost
 ```bash
 python3 -m http.server 8000     # then open http://localhost:8000
 ```
+
+## Optional backend (Supabase): accounts, ladder, links, spectating
+
+The game runs 100% without it — these features just hide themselves. With it you get: email-less handle+password accounts, an ELO ladder (K=32, atomic SQL RPC with replay-guarded match reporting), **duel links** (`?duel=CODE` — replaces the copy-paste SDP dance), **spectator passes** (`?watch=CODE` — live board + emoji reactions), all with graceful degradation.
+
+1. Apply the schema once (tables `ad_profiles/ad_matches/ad_invites/ad_moves/ad_reactions` + `ad_report_match`):
+
+   ```bash
+   # local stack
+   docker exec -i supabase_db_<project> psql -U postgres -d postgres < supabase/schema.sql
+   # hosted: paste supabase/schema.sql into the SQL editor
+   ```
+
+2. Point `js/srv.js` at your project — `SRV_URL` already uses `http://<page-host>:54321` for local play; replace `SRV_ANON` with your project URL/anon key for production (the anon key is public; RLS protects the data).
+
+3. Sign up in-game (**Sign In → Create**). Handles map to synthetic emails (`handle@aether.local`); with local Supabase mail autoconfirmation is on.
+
+Notes: coin balances and cosmetics live in the browser's localStorage (per-device) — before launch, move the wallet server-side; likewise the wager escrow and match reporting are client-trusted and should move behind an edge function for a public release. The `PROVIDER` in `js/economy.js` is a sandbox checkout — swap its `checkout()` for Stripe Checkout sessions.
 
 ## Publish to the public
 
@@ -60,20 +80,30 @@ pc.createOffer().then(o=>pc.setLocalDescription(o));
 - Click a piece → glowing tiles show legal moves (green = move, red = capture) → click one.
 - Drag to orbit, scroll to zoom.
 - Men move diagonally forward; jumps capture and are **forced**, chains must be completed; reach the far rank to crown a King (moves in all diagonals; crowning mid-chain ends the turn).
-- Win by capturing everything or blocking all legal moves. Online duels have a 45 s turn timer.
+- Win by capturing everything or blocking all legal moves. Online duels run a 45 s turn timer (or a chess clock if you pick one); the Daily Gauntlet's *Blazing* round gives you 15 s.
+- Emotes: keys **1–5** (or the HUD bar) — your avatar acts, the crowd cheers, and online opponents see it too.
 - Full rules are in-game under **How to Play**.
 
 ## Layout
 
 ```
-index.html      UI: menu, HUD, chat, overlays, import map
+index.html      UI: menu, HUD, chat, shop/ladder/auth overlays, import map
 css/style.css   theme + HUD styling
 js/game.js      rules engine (pure, testable)
-js/world.js     three.js scene: island, board, FX, picking
-js/actors.js    player avatars with hand rigs + reactive crowd
-js/pieces.js    piece/crown meshes
-js/net.js       transports: BroadcastChannel + WebRTC (manual SDP exchange)
-js/ai.js        Storm AI: iterative-deepening negamax, time-budgeted, 4 levels
-js/main.js      game controller, lobby, timer, chat
+js/world.js     three.js scene: island, board, FX, picking, skins, victory dances
+js/actors.js    avatars (hand rigs, emotes, 6 looks) + reactive seeded crowd
+js/pieces.js    piece/crown meshes + cosmetic skin materials
+js/net.js       transports: BroadcastChannel + WebRTC (codes, duel links)
+js/ai.js        Storm AI: negamax, 4 levels, personalities + taunt lines
+js/clock.js     time controls (blitz/rapid/bullet) with increments + flag-fall
+js/puzzles.js   daily capture-chain puzzles (engine-verified, unique solution)
+js/gauntlet.js  daily 5-round gauntlet: blazing / attrition / king's-rush modifiers
+js/replay.js    deterministic replay codes + viewer
+js/economy.js   coins, purchases, sandbox checkout seam, battle pass, wagers
+js/cosmetics.js skin catalog, unlocks, loadout (persisted)
+js/themes.js    15 world themes; locked realm packs sold in the marketplace
+js/srv.js       Supabase: auth, ladder, invites, spectate streams (optional)
+js/main.js      game controller, lobbies, clocks, chat, spectating, UI
 js/audio.js     WebAudio synth SFX · js/tween.js animation
+supabase/schema.sql  accounts + ELO RPC + invite/spectate tables + RLS
 ```
