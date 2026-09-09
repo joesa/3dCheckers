@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
+import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {addTween,stepTweens,easeOutBack,easeInOutQuad} from './tween.js';
-import {makePiece,addCrown,TEAM_COLORS,setSkin} from './pieces.js';
+import {makePiece,addCrown,TEAM_COLORS,setSkin,setEnv} from './pieces.js';
 import {THEMES,DEFAULT_THEME} from './themes.js';
+import {makeClock,THEME_CLOCKS} from './clocks.js';
 
 const TOP_Y=.05;
 const sq3=([r,c],y=TOP_Y)=>new THREE.Vector3(c-3.5,y,r-3.5);
@@ -146,10 +148,12 @@ export function createWorld(canvas,initialTheme){
 
   /* frame */
   const frameMat=new THREE.MeshStandardMaterial({color:0x6b5a3a,roughness:.4,metalness:.65,emissive:0x2a1c08,emissiveIntensity:.4});
+  const frameMeshes=[];
   for(const[fx,fz,fw,fd]of[[0,-4.25,8.9,.45],[0,4.25,8.9,.45],[-4.25,0,.45,8.9],[4.25,0,.45,8.9]]){
     const b=new THREE.Mesh(new THREE.BoxGeometry(fw,.26,fd),frameMat);
     b.position.set(fx,.06,fz);b.castShadow=true;b.receiveShadow=true;
     scene.add(b);
+    frameMeshes.push(b);
   }
 
   /* tiles */
@@ -569,14 +573,26 @@ export function createWorld(canvas,initialTheme){
   }
 
   canvas.addEventListener('pointermove',ev=>{
+    if(inspect){inspectMove(ev);return;}
     const sq=pick(ev);
     if(hoverCb)hoverCb(sq);
     if(sq){hoverMark.visible=true;hoverMark.position.set(sq[1]-3.5,TOP_Y+.018,sq[0]-3.5);}
     else hoverMark.visible=false;
   });
   let downPos=null;
-  canvas.addEventListener('pointerdown',ev=>{downPos=[ev.clientX,ev.clientY];});
+  canvas.addEventListener('pointerdown',ev=>{
+    downPos=[ev.clientX,ev.clientY];
+    if(inspect){inspect.drag={x:ev.clientX,y:ev.clientY,moved:0};canvas.style.cursor='grabbing';}
+  });
   canvas.addEventListener('pointerup',ev=>{
+    if(inspect){
+      const d=inspect.drag;
+      if(d&&d.moved<.08)inspectTap(ev);
+      inspect.drag=null;
+      canvas.style.cursor='grab';
+      downPos=null;
+      return;
+    }
     if(!downPos)return;
     const dx=ev.clientX-downPos[0],dy=ev.clientY-downPos[1];
     downPos=null;
@@ -665,8 +681,209 @@ export function createWorld(canvas,initialTheme){
     moonCore.material.color.setHex(T.moon);
     makeFX(T.fx);
     lightning=!!T.lightning;
+    if(envNook)setEnvironmentClock();
+    if(boardSetId!=='island')applyBoardSet(boardSetId);
     return curTheme;
   }
+
+  /* ---------------- clock nook · board sets · timepiece inspector ---------------- */
+  let envNook=null,envClock=null,clockStylePref='auto',digitalPref=true,strikeCb=null;
+  let boardSetId='island',glassMats=null,glassEnvTex=null;
+  let inspect=null;
+
+  function getGlassEnv(){
+    if(!glassEnvTex){
+      const pm=new THREE.PMREMGenerator(renderer);
+      glassEnvTex=pm.fromScene(new RoomEnvironment(),.04).texture;
+      pm.dispose();
+    }
+    return glassEnvTex;
+  }
+  function glassBoard(){
+    if(glassMats)return glassMats;
+    const env=getGlassEnv();
+    glassMats={
+      light:new THREE.MeshPhysicalMaterial({color:0xdceaf2,transmission:.9,thickness:.55,roughness:.04,
+        ior:1.52,metalness:0,transparent:true,clearcoat:1,clearcoatRoughness:.05,envMap:env,envMapIntensity:1.7}),
+      dark:new THREE.MeshPhysicalMaterial({color:0x22345a,transmission:.6,thickness:.55,roughness:.09,
+        ior:1.52,metalness:0,transparent:true,clearcoat:1,clearcoatRoughness:.05,envMap:env,envMapIntensity:1.5}),
+      frame:new THREE.MeshPhysicalMaterial({color:0xdfe8f2,metalness:.95,roughness:.1,envMap:env,envMapIntensity:1.8}),
+    };
+    return glassMats;
+  }
+  function tileParity(i){const r=(i/8)|0;return(r+i)%2===1;}
+  function setBaseTiles(){
+    for(let i=0;i<tileMeshes.length;i++){
+      const m=tileMeshes[i];if(!m)continue;
+      m.material=tileParity(i)?darkTile:lightTile;
+    }
+    frameMeshes.forEach(f=>{f.material=frameMat;});
+    gridPlane.material.opacity=.8;
+  }
+  function applyBoardSet(id){
+    boardSetId=id||'island';
+    if(boardSetId==='glass'){
+      const G2=glassBoard();
+      for(let i=0;i<tileMeshes.length;i++){
+        const m=tileMeshes[i];if(!m)continue;
+        m.material=tileParity(i)?G2.dark:G2.light;
+      }
+      frameMeshes.forEach(f=>{f.material=G2.frame;});
+      gridPlane.material.opacity=.34;
+      return;
+    }
+    setBaseTiles();
+    if(boardSetId==='marble'){
+      lightTile.color.setHex(0xefe9dd);lightTile.roughness=.3;lightTile.metalness=.06;
+      darkTile.color.setHex(0x26262c);darkTile.roughness=.26;darkTile.metalness=.3;
+      darkTile.emissive.setHex(0x0b0b10);darkTile.emissiveIntensity=.4;
+      frameMat.color.setHex(0xc9a24e);frameMat.roughness=.24;frameMat.metalness=.85;
+      frameMat.emissive.setHex(0x332705);frameMat.emissiveIntensity=.4;
+    }else if(boardSetId==='noir'){
+      lightTile.color.setHex(0x2c2f38);lightTile.roughness=.35;lightTile.metalness=.2;
+      darkTile.color.setHex(0x101218);darkTile.roughness=.5;darkTile.metalness=.15;
+      darkTile.emissive.setHex(0x000000);darkTile.emissiveIntensity=0;
+      frameMat.color.setHex(0xd7b45e);frameMat.roughness=.2;frameMat.metalness=.95;
+      frameMat.emissive.setHex(0x3a2d0c);frameMat.emissiveIntensity=.5;
+    }else{
+      applyTheme(curTheme);
+    }
+  }
+
+  const CLOCK_POS=new THREE.Vector3(-6.4,-.05,-6.1);
+  function clockOptsFor(id){
+    const T=THEMES[curTheme]||THEMES[DEFAULT_THEME];
+    if(id==='mantel')return{wood:T.rock,trim:T.frame,ember:curTheme==='emberfall'};
+    if(id==='wallround')return{rim:T.frame,back:T.rock,dial:{numerals:T.grid,tick:T.grid,inner:'rgba(0,0,0,0)'}};
+    if(id==='orbital')return{hue:T.crystals[0]};
+    if(id==='tower')return{stone:T.rock,roof:T.plat,dial:{numerals:T.grid,tick:T.grid,inner:'rgba(0,0,0,0)'}};
+    if(id==='hourglass')return{wood:T.rock,trim:T.frame,sand:T.water};
+    if(id==='sundial')return{stone:T.grass,trim:T.frame};
+    if(id==='flip')return{body:T.plat};
+    return{};
+  }
+  function makeSideTable(){
+    const g=new THREE.Group();
+    const wood=new THREE.MeshStandardMaterial({color:0x51402e,roughness:.7,metalness:.1});
+    const top=new THREE.Mesh(new THREE.CylinderGeometry(.62,.62,.06,32),wood);
+    top.position.y=.6;top.castShadow=true;top.receiveShadow=true;
+    g.add(top);
+    const lip=new THREE.Mesh(new THREE.TorusGeometry(.62,.018,8,40),
+      new THREE.MeshStandardMaterial({color:0xc9a04e,roughness:.3,metalness:.9}));
+    lip.rotation.x=Math.PI/2;lip.position.y=.628;
+    g.add(lip);
+    const stem=new THREE.Mesh(new THREE.CylinderGeometry(.07,.11,.55,10),wood);
+    stem.position.y=.3;stem.castShadow=true;
+    g.add(stem);
+    for(let i=0;i<3;i++){
+      const a=i/3*Math.PI*2;
+      const foot=new THREE.Mesh(new THREE.BoxGeometry(.09,.05,.44),wood);
+      foot.position.set(Math.sin(a)*.17,.03,Math.cos(a)*.17);
+      foot.rotation.y=a;foot.rotation.x=.55;
+      g.add(foot);
+    }
+    return g;
+  }
+  function setEnvironmentClock(style){
+    if(style!==undefined&&style!==null)clockStylePref=style||'auto';
+    if(envNook){
+      scene.remove(envNook);
+      envNook.traverse(o=>{
+        if(o.isMesh){o.geometry.dispose();if(o.material.dispose)o.material.dispose();}
+      });
+      envNook=null;
+    }
+    const id=clockStylePref==='auto'?(THEME_CLOCKS[curTheme]||'wallround'):clockStylePref;
+    const clock=makeClock(id,clockOptsFor(id));
+    envClock=clock;
+    if(strikeCb)clock.onStrike=strikeCb;
+    clock.setDigital(digitalPref);
+    envNook=new THREE.Group();
+    envNook.add(makeSideTable());
+    clock.group.position.set(0,.66,0);
+    envNook.add(clock.group);
+    envNook.position.copy(CLOCK_POS);
+    envNook.rotation.y=.46;
+    scene.add(envNook);
+  }
+
+  function enterClockInspect(){
+    if(!envClock||inspect)return false;
+    const obj=envClock.group;
+    const orig={p:obj.position.clone(),q:obj.quaternion.clone(),s:obj.scale.clone()};
+    obj.updateWorldMatrix(true,false);
+    const box=new THREE.Box3().setFromObject(obj);
+    const size=box.getSize(new THREE.Vector3());
+    const center=box.getCenter(new THREE.Vector3());
+    const radius=Math.max(size.x,size.y,size.z,1)*.95;
+    const pivot=new THREE.Group();
+    pivot.position.copy(center);
+    scene.add(pivot);
+    const wp=new THREE.Vector3(),wq=new THREE.Quaternion(),ws=new THREE.Vector3();
+    obj.matrixWorld.decompose(wp,wq,ws);
+    envNook.remove(obj);
+    pivot.add(obj);
+    obj.position.copy(wp.sub(center));
+    obj.quaternion.copy(wq);
+    obj.scale.copy(ws);
+    inspect={pivot,obj,center,radius,dist:radius*2.7,drag:null,
+      saved:{pos:camera.position.clone(),target:controls.target.clone(),minD:controls.minDistance},
+      orig};
+    controls.enabled=false;
+    controls.autoRotate=false;
+    hoverMark.visible=false;
+    controls.minDistance=.3;
+    controls.target.copy(center);
+    const dir=new THREE.Vector3(0,.35,1).normalize();
+    camera.position.copy(center).addScaledVector(dir,inspect.dist);
+    camera.lookAt(center);
+    canvas.style.cursor='grab';
+    return true;
+  }
+  function exitClockInspect(){
+    if(!inspect)return;
+    const{pivot,obj,saved,orig}=inspect;
+    pivot.remove(obj);
+    if(envNook){
+      envNook.add(obj);
+      obj.position.copy(orig.p);obj.quaternion.copy(orig.q);obj.scale.copy(orig.s);
+    }
+    scene.remove(pivot);
+    camera.position.copy(saved.pos);
+    controls.target.copy(saved.target);
+    controls.minDistance=saved.minD;
+    controls.enabled=true;
+    canvas.style.cursor='default';
+    inspect=null;
+  }
+  function inspectMove(ev){
+    const d=inspect.drag;
+    if(!d)return;
+    const dx=(ev.clientX-d.x)*.012,dy=(ev.clientY-d.y)*.012;
+    d.x=ev.clientX;d.y=ev.clientY;
+    d.moved+=Math.abs(dx)+Math.abs(dy);
+    inspect.pivot.quaternion.premultiply(
+      new THREE.Quaternion().setFromEuler(new THREE.Euler(dy,dx,0,'YXZ')));
+  }
+  function inspectTap(ev){
+    const rect=canvas.getBoundingClientRect();
+    ptr.x=((ev.clientX-rect.left)/rect.width)*2-1;
+    ptr.y=-((ev.clientY-rect.top)/rect.height)*2+1;
+    raycaster.setFromCamera(ptr,camera);
+    const hits=raycaster.intersectObject(inspect.obj,true);
+    if(hits.length&&envClock.ring){
+      envClock.ring();
+      if(strikeCb)strikeCb();
+    }
+  }
+  canvas.addEventListener('wheel',ev=>{
+    if(!inspect)return;
+    inspect.dist=THREE.MathUtils.clamp(inspect.dist*(ev.deltaY>0?1.12:.89),
+      inspect.radius*.9,inspect.radius*6);
+    const dir=camera.position.clone().sub(inspect.center).normalize();
+    camera.position.copy(inspect.center).addScaledVector(dir,inspect.dist);
+  },{passive:true});
+
   applyTheme(initialTheme||DEFAULT_THEME);
 
   /* ---------------- loop ---------------- */
@@ -681,6 +898,7 @@ export function createWorld(canvas,initialTheme){
     if(idle>22)controls.autoRotate=true;
 
     stepTweens(dt);
+    if(envClock)envClock.update(dt);
     controls.update();
 
     stars.rotation.y+=dt*.004;
@@ -767,6 +985,7 @@ export function createWorld(canvas,initialTheme){
       burst(new THREE.Vector3((Math.random()-.5)*4,1,(Math.random()-.5)*4),hex,18,1.1);
     },
     reskin(key,params){
+      if(params&&params.transmissive)setEnv(getGlassEnv());
       setSkin(key,params);
       for(const[,mesh]of pieces)killPieceMesh(mesh);
       pieces.clear();
@@ -792,6 +1011,15 @@ export function createWorld(canvas,initialTheme){
     get cam(){return{camera,controls,scene};},
     setTheme(id){return applyTheme(id);},
     currentTheme(){return curTheme;},
+    setEnvironmentClock,
+    applyBoardSet,
+    enterClockInspect,
+    exitClockInspect,
+    get inspecting(){return!!inspect;},
+    get clock(){return envClock;},
+    clockStyle(){return clockStylePref==='auto'?(THEME_CLOCKS[curTheme]||'wallround'):clockStylePref;},
+    setClockDigital(on){digitalPref=!!on;if(envClock)envClock.setDigital(!!on);},
+    onClockStrike(cb){strikeCb=cb;if(envClock)envClock.onStrike=cb;},
     removeObject(o){scene.remove(o);},
     makeGroup(x=0,y=0,z=0){const g=new THREE.Group();g.position.set(x,y,z);scene.add(g);return g;},
     sqToVec(sq,y){return sq3(sq,y===undefined?TOP_Y:y);},

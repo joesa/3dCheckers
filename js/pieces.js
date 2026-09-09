@@ -9,8 +9,9 @@ const geoCache={},matCache={};
 const geo=(k,f)=>geoCache[k]||(geoCache[k]=f());
 const mat=(k,f)=>matCache[k]||(matCache[k]=f());
 
-let skinParams=null,skinKey='default';
+let skinParams=null,skinKey='default',envRef=null;
 export function setSkin(key,params){skinKey=key;skinParams=params||{};}
+export function setEnv(t){envRef=t;}
 
 function applySkin(base,o){
   if(!o)return base;
@@ -26,6 +27,17 @@ function teamMats(color){
   const C=TEAM_COLORS[color];
   const sp=skinParams||{};
   const eb=sp.emissiveBoost||1;
+  if(sp.transmissive){
+    return {
+      body:mat(color+'-body-'+skinKey,()=>new THREE.MeshPhysicalMaterial({color:C.body,
+        transmission:.86,thickness:.32,roughness:.05,ior:1.5,metalness:0,transparent:true,
+        clearcoat:1,clearcoatRoughness:.06,envMap:envRef,envMapIntensity:1.6,
+        emissive:C.glow,emissiveIntensity:.05})),
+      dark:mat(color+'-dark-'+skinKey,()=>new THREE.MeshPhysicalMaterial({color:C.dark,
+        transmission:.55,thickness:.3,roughness:.09,ior:1.5,metalness:.05,transparent:true,
+        envMap:envRef,envMapIntensity:1.4})),
+    };
+  }
   return {
     body:mat(color+'-body-'+skinKey,()=>new THREE.MeshStandardMaterial({...applySkin({color:C.body,roughness:.42,metalness:.28},sp.body),emissive:C.glow,emissiveIntensity:Math.min(1,.14*(1+(sp.glow||0)*3)*eb)})),
     dark:mat(color+'-dark-'+skinKey,()=>new THREE.MeshStandardMaterial(applySkin({color:C.dark,roughness:.55,metalness:.2},sp.dark))),

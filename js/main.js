@@ -11,7 +11,7 @@ import {generatePuzzle,dayKey} from './puzzles.js';
 import {GAUNTLET_ROUNDS,rollDaily,gauntletState,saveGauntlet,roundReward,clearReward} from './gauntlet.js';
 import {buildCode,parseCode,openViewer} from './replay.js';
 import * as ECO from './economy.js';
-import {SKINS,THRONES,VICTORIES,THEMEPACKS,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog} from './cosmetics.js';
+import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog} from './cosmetics.js';
 import {SRV,srvInit,onMeChange,signUp,signIn,signOut,reportMatch,ladder,
   createInvite,getInvite,patchInvite,newCode as srvNewCode,pushMove,getMoves,react as srvReact,getReactions} from './srv.js';
 
@@ -1148,7 +1148,7 @@ function refreshWallet(){
 }
 
 let shopTab='Pieces';
-const ITEMCAT={Pieces:'skin',Thrones:'throne',Triumphs:'victory',Realms:'theme'};
+const ITEMCAT={Pieces:'skin',Boards:'board',Thrones:'throne',Clocks:'clock',Triumphs:'victory',Realms:'theme'};
 function shopId(tab,id){return tab==='Realms'?'theme:'+id:id;}
 
 function openShop(tab){
@@ -1173,6 +1173,8 @@ function openShop(tab){
 function descFor(tab){
   if(tab==='Realms')return 'World skin — unlocks in the Worlds picker';
   if(tab==='Pieces')return 'Army finish for both colors';
+  if(tab==='Boards')return 'Table & board set for the arena';
+  if(tab==='Clocks')return 'Timepiece for your corner table';
   if(tab==='Thrones')return 'Your seat upon the island';
   if(tab==='Triumphs')return 'Victory dance for your army';
   return '';
@@ -1190,7 +1192,7 @@ function renderCat(grid,tabName){
     const price=item.price===0?'Free':item.price+' coins'+(item.cash?' or $'+item.cash:'');
     card.innerHTML='<h4>'+item.name+'</h4><div class="desc">'+descFor(tabName)+'</div><div class="price">'+price+'</div>';
     const btn=document.createElement('button');
-    if(id==='default'){btn.textContent=equipped?'Equipped':'Standard';btn.disabled=true;btn.classList.add('owned');}
+    if(id==='default'||id==='auto'){btn.textContent=equipped?'Equipped':'Standard';btn.disabled=true;btn.classList.add('owned');}
     else if(equipped){btn.textContent='Equipped';btn.classList.add('equipped');btn.disabled=true;}
     else if(owned){
       btn.textContent='Equip';
@@ -1223,6 +1225,7 @@ function equip(tab,id){
   if(slot==='skin')world.reskin(id,(SKINS[id]||{}).params||{});
   if(slot==='throne')buildActors();
   if(slot==='theme')world.setTheme(id);
+  if(slot==='board'||slot==='clock')refreshEnvLook();
   toast('Equipped','good');
   openShop();
 }
@@ -1459,7 +1462,54 @@ srvInit().then(()=>{
   else if(wq)startSpectate(wq.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,9));
 });
 
+/* ================= timepiece ================= */
+
+function refreshEnvLook(){
+  const eq=getEquip();
+  world.applyBoardSet(unlocked(eq.board)?eq.board:'island');
+  world.setEnvironmentClock(unlocked(eq.clock)?eq.clock:'auto');
+  world.setClockDigital(lsGet('ad-digital')!=='0');
+}
+refreshEnvLook();
+world.onClockStrike(()=>sfx.bell());
+
+function toggleInspect(){
+  if(world.inspecting){
+    world.exitClockInspect();
+    show($('#timepiece-bar'),false);
+    return;
+  }
+  const style=world.clockStyle();
+  const item=CLOCKS[style]||{name:'The Skeleton Bell'};
+  $('#tp-name').textContent=item.name;
+  const on=lsGet('ad-digital')!=='0';
+  $('#tp-digital').textContent='Digital: '+(on?'On':'Off');
+  if(world.enterClockInspect())show($('#timepiece-bar'),true);
+}
+$('#btn-clock').onclick=()=>{sfx.click();toggleInspect();};
+$('#tp-close').onclick=()=>{sfx.click();world.exitClockInspect();show($('#timepiece-bar'),false);};
+$('#tp-reset').onclick=()=>{sfx.click();world.exitClockInspect();show($('#timepiece-bar'),false);};
+$('#tp-digital').onclick=()=>{
+  const on=lsGet('ad-digital')==='0';
+  lsSet('ad-digital',on?'1':'0');
+  world.setClockDigital(on);
+  $('#tp-digital').textContent='Digital: '+(on?'On':'Off');
+  sfx.click();
+};
+window.addEventListener('keydown',e=>{
+  const tag=e.target&&e.target.tagName;
+  if(tag==='INPUT'||tag==='TEXTAREA')return;
+  if(e.key==='Escape'&&world.inspecting){
+    world.exitClockInspect();
+    show($('#timepiece-bar'),false);
+  }else if((e.key==='c'||e.key==='C')&&!world.inspecting){
+    const openModal=document.querySelector('.overlay:not(.hidden),#menu:not(.hidden)');
+    if(!openModal)toggleInspect();
+  }
+});
+
 window.__aether={G,world,GAME,playMove,refreshMoves,rigs,
   eco:ECO,doEmote,startPuzzle,startGauntlet,gvRound,openShop,showTaunt,buildCode,parseCode,
   endGame,startHotseat,SRV,createWatch,startSpectate,joinByCode,proposeWager,
+  refreshEnvLook,toggleInspect,CLOCKS,
   get crowd(){return crowd;},get seed(){return SEED;}};

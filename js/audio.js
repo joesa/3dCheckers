@@ -62,4 +62,5 @@ export const sfx={
   error(){tone(180,{dur:.2,type:'square',g:.3,slide:-60});},
   join(){tone(440,{dur:.15,type:'sine',g:.5});tone(660,{dur:.25,type:'sine',g:.5,delay:.12});},
   tick(){tone(980,{dur:.05,type:'sine',g:.25});},
+  bell(){tone(1568,{dur:.38,type:'triangle',g:.3});tone(2349,{dur:.26,type:'sine',g:.15});noise({dur:.05,f:5200,g:.08});},
 };

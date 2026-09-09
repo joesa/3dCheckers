@@ -82,6 +82,8 @@ pc.createOffer().then(o=>pc.setLocalDescription(o));
 - Men move diagonally forward; jumps capture and are **forced**, chains must be completed; reach the far rank to crown a King (moves in all diagonals; crowning mid-chain ends the turn).
 - Win by capturing everything or blocking all legal moves. Online duels run a 45 s turn timer (or a chess clock if you pick one); the Daily Gauntlet's *Blazing* round gives you 15 s.
 - Emotes: keys **1–5** (or the HUD bar) — your avatar acts, the crowd cheers, and online opponents see it too.
+- **Timepieces:** every world carries its own clock on a corner table (press **C** or the ⏱ button to lift it for a full 3D inspection — free rotate on all axes, zoom, see the movement from the back; tap the bells of *The Skeleton Bell* to ring them). Choose any clock in **Marketplace → Clocks**; "World Default" gives each of the 15 realms its own style (duskhold's bespoke brass skeleton-bell with live gear train, sweeping hands, alarm hand and toggleable digital display, lantern-vale's flip clock, voidgarden's holographic orrery…).
+- **Board sets:** Marketplace → Boards — swap the arena surface: default stone, Noir & Gold, Carrara Marble, or the premium **Mirrorglass Table** (real transmissive glass tiles with chrome frame; pairs with the Prism Glass piece skin).
 - Full rules are in-game under **How to Play**.
 
 ## Layout
@@ -96,6 +98,7 @@ js/pieces.js    piece/crown meshes + cosmetic skin materials
 js/net.js       transports: BroadcastChannel + WebRTC (codes, duel links)
 js/ai.js        Storm AI: negamax, 4 levels, personalities + taunt lines
 js/clock.js     time controls (blitz/rapid/bullet) with increments + flag-fall
+js/clocks.js    8 procedural clock styles (incl. the Skeleton Bell alarm) + per-world assignment
 js/puzzles.js   daily capture-chain puzzles (engine-verified, unique solution)
 js/gauntlet.js  daily 5-round gauntlet: blazing / attrition / king's-rush modifiers
 js/replay.js    deterministic replay codes + viewer
