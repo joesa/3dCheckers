@@ -8,17 +8,24 @@ Multiplayer 3D checkers (English draughts) on a floating sky-island. Pure HTML/C
 
 ## Run locally
 
-Any static file server works (WebRTC and BroadcastChannel need `http://localhost` or `https://`):
+Any static file server works (WebRTC and BroadcastChannel need `http://localhost` or `https://`). `npx vite` does **not** — `three` is a bare import resolved by the importmap in `index.html`, which Vite ignores:
 
 ```bash
-python3 -m http.server 8000     # then open http://localhost:8000
+python3 -m http.server 8000                    # then open http://localhost:8000
+python3 -m http.server 8000 --bind 0.0.0.0     # also reachable as http://<lan-ip>:8000
+```
+
+`supabase start` publishes every port on `0.0.0.0` and ignores `[db.network_restrictions]` (hosted-only), which leaves the raw database exposed as `postgres/postgres` to your LAN. Lock it to loopback after each start:
+
+```bash
+sudo scripts/lock-local-ports.sh       # sudo scripts/lock-local-ports.sh --off
 ```
 
 ## Optional backend (Supabase): accounts, ladder, links, spectating
 
 The game runs 100% without it — these features just hide themselves. With it you get: email-less handle+password accounts, an ELO ladder (K=32, atomic SQL RPC with replay-guarded match reporting), **duel links** (`?duel=CODE` — replaces the copy-paste SDP dance), **spectator passes** (`?watch=CODE` — live board + emoji reactions), all with graceful degradation.
 
-1. Apply the schema once (tables `ad_profiles/ad_matches/ad_invites/ad_moves/ad_reactions` + `ad_report_match`):
+1. Apply the schema once (tables `ad_profiles/ad_wallet/ad_equip/ad_matches/ad_invites/ad_moves/ad_reactions` + `ad_report_match` + the `ad_provision_user` trigger):
 
    ```bash
    # local stack
@@ -26,11 +33,23 @@ The game runs 100% without it — these features just hide themselves. With it y
    # hosted: paste supabase/schema.sql into the SQL editor
    ```
 
-2. Point the client at your project with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON` (the anon key is public; RLS protects the data). With no env set, `SRV_URL` only defaults to `http://127.0.0.1:54321` when the page itself is served from `localhost`/`127.0.0.1` — any other host (e.g. a Vercel deploy) stays offline instead of calling a dead `:54321`.
+2. Point the client at your project with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON` (the anon key is public; RLS protects the data). With no env set, `SRV_URL` auto-resolves to `http://<hostname>:54321` for loopback and private hosts (`127.0.0.1`, `localhost`, `10.x`, `192.168.x`, `172.16–31.x`, `*.local`), so serving the game to a phone over your LAN reaches the same stack. Public hosts still stay offline rather than calling a dead `:54321`. The auth panel states the resolved reason when the backend is unreachable.
 
-3. Sign up in-game (**Sign In → Create**). Handles map to synthetic emails (`handle@aether.local`); with local Supabase mail autoconfirmation is on.
+3. Sign up in-game (**Sign In → Create**). Handles map to synthetic emails (`handle@aether.local`); with local Supabase mail autoconfirmation is on. The `ad_provision_user` trigger creates the profile, wallet and loadout rows atomically with the auth user.
 
-Notes: coin balances and cosmetics live in the browser's localStorage (per-device) — before launch, move the wallet server-side; likewise the wager escrow and match reporting are client-trusted and should move behind an edge function for a public release. The `PROVIDER` in `js/economy.js` is a sandbox checkout — swap its `checkout()` for Stripe Checkout sessions.
+### What persists where
+
+| | Server (`auth.uid()`-scoped, RLS) | localStorage |
+|---|---|---|
+| handle, ELO, W/L | `ad_profiles` | cache |
+| coins, owned items, premium, battle-pass XP & claims | `ad_wallet` | `ad-wallet:<uid>` |
+| equipped skin / throne / board / clock / triumph | `ad_equip` | `ad-equip:<uid>` |
+| duel links, spectate streams | `ad_invites`, `ad_moves`, `ad_reactions` | — |
+| match history (seeded replay guard) | `ad_matches` | — |
+
+Signing in hydrates both rows and every write is mirrored back through a 1.2 s debounce, flushed on `pagehide`/`visibilitychange`. Signing out drops the cache back to an isolated guest bucket, so two accounts on one browser can no longer see each other's coins. Progress made while signed out lives in the unscoped `ad-wallet` and is adopted once by the next account created there.
+
+Still client-trusted and needing an edge function before a public release: wager escrow, and the wallet write path itself (a player can edit their own `ad_wallet` row via REST today).
 
 ## Publish to the public
 
@@ -113,10 +132,14 @@ js/puzzles.js   daily capture-chain puzzles (engine-verified, unique solution)
 js/gauntlet.js  daily 5-round gauntlet: blazing / attrition / king's-rush modifiers
 js/replay.js    deterministic replay codes + viewer
 js/economy.js   coins, purchases, sandbox checkout seam, battle pass, wagers
-js/cosmetics.js skin catalog, unlocks, loadout (persisted)
+js/scope.js     which account owns the local asset cache + where to mirror it
+js/cosmetics.js skin catalog, unlocks, loadout (persisted per account)
 js/themes.js    19 world themes; locked realm packs sold in the marketplace
+js/auth.js      Supabase-or-local facade; binds asset scope, mirrors wallet/loadout
+js/localauth.js offline fallback accounts (per-handle localStorage)
 js/srv.js       Supabase: auth, ladder, invites, spectate streams (optional)
 js/main.js      game controller, lobbies, clocks, chat, spectating, UI
 js/audio.js     WebAudio synth SFX · js/tween.js animation
-supabase/schema.sql  accounts + ELO RPC + invite/spectate tables + RLS
+scripts/lock-local-ports.sh  nft rules keeping the local DB off the LAN
+supabase/schema.sql  accounts + wallet/loadout + ELO RPC + invite/spectate tables + RLS
 ```

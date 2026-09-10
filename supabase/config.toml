@@ -70,7 +70,9 @@ enabled = true
 sql_paths = ["./seed.sql"]
 
 [db.network_restrictions]
-# Enable management of network restrictions.
+# NOTE: this block only applies to hosted projects. `supabase start` always
+# publishes every port on 0.0.0.0 regardless. Use scripts/lock-local-ports.sh
+# to keep the raw database off the LAN.
 enabled = false
 # List of IPv4 CIDR blocks allowed to connect to the database.
 # Defaults to allow all IPv4 connections. Set empty array to block all IPs.
