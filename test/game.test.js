@@ -1,68 +1,76 @@
-import { initialState, legalMoves, applyMove, countPieces, isPromo, sqName } from '../js/game.js';
-import { RED, BLACK, SIZE } from '../js/game.js';
+import { describe, it, expect } from 'vitest';
+import {
+  initialState, legalMoves, applyMove, countPieces, isPromo, sqName,
+  RED, BLACK, SIZE,
+} from '../js/game.js';
 
-function assert(condition, msg) {
-  if (!condition) throw new Error(msg || 'Assertion failed');
-}
+describe('initialState', () => {
+  it('deals 12 pieces to each side', () => {
+    const state = initialState();
+    expect(countPieces(state.board, RED)).toBe(12);
+    expect(countPieces(state.board, BLACK)).toBe(12);
+  });
 
-function runTests() {
-  console.log('Running Aether Draughts tests...\n');
+  it('gives Red the first move', () => {
+    expect(initialState().turn).toBe(RED);
+  });
+});
 
-  // Test 1: initialState
-  const state = initialState();
-  assert(countPieces(state.board, RED) === 12, 'Red pieces should be 12');
-  assert(countPieces(state.board, BLACK) === 12, 'Black pieces should be 12');
-  assert(state.turn === RED, 'Red should move first');
-  console.log('✓ initialState tests passed');
+describe('isPromo', () => {
+  it('promotes Red on row 0 and Black on the last row', () => {
+    expect(isPromo(RED, 0)).toBe(true);
+    expect(isPromo(BLACK, SIZE - 1)).toBe(true);
+  });
 
-  // Test 2: isPromo
-  assert(isPromo(RED, 0) === true, 'Red at row 0 should be promotion');
-  assert(isPromo(BLACK, SIZE - 1) === true, 'Black at last row should be promotion');
-  assert(isPromo(RED, 1) === false, 'Red at row 1 should not be promotion');
-  console.log('✓ isPromo tests passed');
+  it('does not promote short of the far row', () => {
+    expect(isPromo(RED, 1)).toBe(false);
+  });
+});
 
-  // Test 3: sqName
-  assert(sqName([0, 0]) === 'a8', 'sqName [0,0] should be a8');
-  assert(sqName([7, 7]) === 'h1', 'sqName [7,7] should be h1');
-  console.log('✓ sqName tests passed');
+describe('sqName', () => {
+  it('maps board coordinates to algebraic squares', () => {
+    expect(sqName([0, 0])).toBe('a8');
+    expect(sqName([7, 7])).toBe('h1');
+  });
+});
 
-  // Test 4: legalMoves initial position
-  const redMoves = legalMoves(state, RED);
-  assert(redMoves.length > 0, 'Red should have moves on first turn');
-  const blackMoves = legalMoves(state, BLACK);
-  assert(blackMoves.length > 0, 'Black should have moves on first turn');
-  console.log('✓ legalMoves initial position tests passed');
+describe('legalMoves', () => {
+  it('offers moves to both colours from the opening position', () => {
+    const state = initialState();
+    expect(legalMoves(state, RED).length).toBeGreaterThan(0);
+    expect(legalMoves(state, BLACK).length).toBeGreaterThan(0);
+  });
 
-  // Test 5: applyMove
-  const move = redMoves[0];
-  const nextState = applyMove(state, move);
-  assert(nextState.turn === BLACK, 'Turn should switch to Black');
-  assert(nextState.moveNo === 1, 'Move number should be 1');
-  assert(nextState.winner === null, 'No winner yet');
-  console.log('✓ applyMove tests passed');
+  it('forces the jump when one is available', () => {
+    const state = initialState();
+    state.board[5][2] = { color: RED, king: false };
+    state.board[4][3] = { color: BLACK, king: false };
+    state.board[3][4] = null;
 
-  // Test 6: forced jumps
-  const jumpState = initialState();
-  jumpState.board[5][2] = { color: RED, king: false };
-  jumpState.board[4][3] = { color: BLACK, king: false };
-  jumpState.board[3][4] = null;
-  const jumpMoves = legalMoves(jumpState, RED);
-  const hasJump = jumpMoves.some(m => m.captures.length > 0);
-  const hasStep = jumpMoves.some(m => m.captures.length === 0);
-  assert(hasJump === true, 'Should have jump moves');
-  assert(hasStep === false, 'Should not have step moves when jump available');
-  console.log('✓ forced jumps tests passed');
+    const moves = legalMoves(state, RED);
+    expect(moves.some(m => m.captures.length > 0)).toBe(true);
+    expect(moves.some(m => m.captures.length === 0)).toBe(false);
+  });
+});
 
-  // Test 7: countPieces
-  const board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
-  board[0][1] = { color: RED, king: false };
-  board[0][3] = { color: RED, king: true };
-  board[1][2] = { color: BLACK, king: false };
-  assert(countPieces(board, RED) === 2, 'Should count 2 red pieces');
-  assert(countPieces(board, BLACK) === 1, 'Should count 1 black piece');
-  console.log('✓ countPieces tests passed');
+describe('applyMove', () => {
+  it('passes the turn and advances the move counter', () => {
+    const state = initialState();
+    const next = applyMove(state, legalMoves(state, RED)[0]);
+    expect(next.turn).toBe(BLACK);
+    expect(next.moveNo).toBe(1);
+    expect(next.winner).toBeNull();
+  });
+});
 
-  console.log('\n✅ All tests passed!');
-}
+describe('countPieces', () => {
+  it('counts men and kings per colour', () => {
+    const board = Array.from({ length: SIZE }, () => Array(SIZE).fill(null));
+    board[0][1] = { color: RED, king: false };
+    board[0][3] = { color: RED, king: true };
+    board[1][2] = { color: BLACK, king: false };
 
-runTests();
+    expect(countPieces(board, RED)).toBe(2);
+    expect(countPieces(board, BLACK)).toBe(1);
+  });
+});
