@@ -28,6 +28,9 @@ function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 // Initialize auth on boot
 Auth.init();
 
+// Create world - must be before Auth.init() completes if it triggers world usage
+const world=createWorld($('#gl'),lsGet('ad-theme')||DEFAULT_THEME);
+
 const chatLastSend={last:0,throttle:1500};
 function throttledChat(text){
   const now=Date.now();
