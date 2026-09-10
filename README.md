@@ -25,13 +25,19 @@ sudo scripts/lock-local-ports.sh       # sudo scripts/lock-local-ports.sh --off
 
 The game runs 100% without it — these features just hide themselves. With it you get: email-less handle+password accounts, an ELO ladder (K=32, atomic SQL RPC with replay-guarded match reporting), **duel links** (`?duel=CODE` — replaces the copy-paste SDP dance), **spectator passes** (`?watch=CODE` — live board + emoji reactions), all with graceful degradation.
 
-1. Apply the schema once (tables `ad_profiles/ad_wallet/ad_equip/ad_matches/ad_invites/ad_moves/ad_reactions` + `ad_report_match` + the `ad_provision_user` trigger):
+1. Apply the migrations (tables `ad_profiles/ad_wallet/ad_equip/ad_matches/ad_invites/ad_moves/ad_reactions` + `ad_report_match` + the `ad_provision_user` trigger). `supabase/migrations/` is the source of truth; `supabase/schema.sql` is a generated concatenation of it, kept only for piping into a plain Postgres:
 
    ```bash
-   # local stack
-   docker exec -i supabase_db_<project> psql -U postgres -d postgres < supabase/schema.sql
-   # hosted: paste supabase/schema.sql into the SQL editor
+   npx supabase start                  # boots the local stack
+   npx supabase db push --local        # apply pending migrations locally
+   npx supabase db reset               # drop everything and replay from scratch
+
+   # hosted project: link once, then push
+   npx supabase link --project-ref YOUR-REF
+   npx supabase db push --linked
    ```
+
+   Plain `npx supabase db push` (no flag) targets the *remote* project and fails with "Cannot find project ref" when nothing is linked — that is the flag people miss.
 
 2. Point the client at your project with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON` (the anon key is public; RLS protects the data). With no env set, `SRV_URL` auto-resolves to `http://<hostname>:54321` for loopback and private hosts (`127.0.0.1`, `localhost`, `10.x`, `192.168.x`, `172.16–31.x`, `*.local`), so serving the game to a phone over your LAN reaches the same stack. Public hosts still stay offline rather than calling a dead `:54321`. The auth panel states the resolved reason when the backend is unreachable.
 

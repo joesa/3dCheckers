@@ -1,3 +1,7 @@
+-- GENERATED FILE — do not edit.
+-- Regenerate: cat supabase/migrations/*.sql > supabase/schema.sql
+-- Source of truth is supabase/migrations/; apply with 'npx supabase db push --local'.
+
 -- Aether Draughts — ladder, invites, spectating
 create table if not exists public.ad_profiles(
   uid uuid primary key,

@@ -1,0 +1,3 @@
+-- Aether Draughts — seed data, loaded by `supabase db reset` after migrations.
+-- Nothing to seed: accounts, wallets and loadouts are created by the
+-- ad_provision_user trigger, and ad_profiles/ad_wallet start empty by design.
