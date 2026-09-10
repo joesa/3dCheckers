@@ -48,7 +48,6 @@ export async function signOut(){
   }
   Auth.me=null;
   Auth.profile=null;
-  if(meCb)meCb();
 }
 
 export async function reportMatch(opponentUid,result,nonce){
@@ -65,4 +64,3 @@ export async function ladder(limit=50){
   return localLadder(limit);
 }
 
-export {srvInit as srvInit, onMeChange};
