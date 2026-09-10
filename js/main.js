@@ -1454,6 +1454,14 @@ function updateAuthUI(){
 onMeChange(updateAuthUI);
 
 function openAuth(){
+  if(!SRV.ok && !Auth.ok){
+    // Allow local auth even without backend
+    $('#auth-status').textContent='';
+    $('#auth-status').className='status';
+    show($('#menu'),false);
+    show($('#auth'),true);
+    return;
+  }
   if(!SRV.ok){toast('Backend offline \u2014 start the Supabase stack to sign in');return;}
   $('#auth-status').textContent='';
   $('#auth-status').className='status';
