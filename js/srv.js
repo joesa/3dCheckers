@@ -3,15 +3,16 @@ import {CONFIG} from './config.js';
 /* Supabase backend: accounts, ELO ladder, invite links, spectating.
    Everything degrades gracefully when offline — the game never blocks on it. */
 
-export const SRV={ok:false,me:null,profile:null,oppUid:null};
+export const SRV={ok:false,me:null,profile:null,oppUid:null,why:''};
 let sb=null,meCb=null,initP=null;
 const PING_MS=2500,CALL_MS=8000;
 export function onMeChange(fn){meCb=fn;}
 const EMAIL=h=>h.toLowerCase().replace(/[^a-z0-9._-]/g,'')+'@aether.local';
 
-export function markOffline(){
+export function markOffline(why){
   if(!SRV.ok)return;
   SRV.ok=false;sb=null;
+  SRV.why=why||'backend unreachable';
 }
 
 const offline=why=>({ok:false,why:why||'backend unreachable',offline:true});
@@ -38,12 +39,12 @@ async function reachable(url){
 
 function doInit(){
   return (async()=>{
-    if(!CONFIG.SRV_URL){SRV.ok=false;return false;}
+    if(!CONFIG.SRV_URL){SRV.ok=false;SRV.why='no backend configured for '+location.hostname;return false;}
     try{
-      if(!(await reachable(CONFIG.SRV_URL))){SRV.ok=false;return false;}
+      if(!(await reachable(CONFIG.SRV_URL))){SRV.ok=false;SRV.why='no reply from '+CONFIG.SRV_URL;return false;}
       const mod=await import('https://esm.sh/@supabase/supabase-js@2.45.0');
       sb=mod.createClient(CONFIG.SRV_URL,CONFIG.SRV_ANON,{auth:{persistSession:true,autoRefreshToken:true}});
-      SRV.ok=true;
+      SRV.ok=true;SRV.why='';
       const {data}=await sb.auth.getSession();
       if(data&&data.session){
         SRV.me=data.session.user;
@@ -52,7 +53,7 @@ function doInit(){
       sb.auth.onAuthStateChange(ev=>{
         if(ev==='SIGNED_OUT'){SRV.me=null;SRV.profile=null;if(meCb)meCb();}
       });
-    }catch(e){SRV.ok=false;sb=null;}
+    }catch(e){SRV.ok=false;sb=null;SRV.why='client load failed: '+(e&&e.message||e);}
     return SRV.ok;
   })();
 }
@@ -61,6 +62,12 @@ function doInit(){
 export function srvInit(){
   if(!initP)initP=doInit().then(ok=>{if(meCb)meCb();return ok;},()=>{SRV.ok=false;if(meCb)meCb();return false;});
   return initP;
+}
+
+/* force a fresh probe after the backend went away and came back */
+export function srvReconnect(){
+  initP=null;
+  return srvInit();
 }
 
 async function loadProfile(){
@@ -76,11 +83,12 @@ export async function signUp(handle,pw){
   if(!/^[a-zA-Z0-9._-]{3,18}$/.test(handle))return {ok:false,why:'handle: 3–18 letters/digits/._-'};
   if((pw||'').length<8)return {ok:false,why:'password needs 8+ chars'};
   try{
-    const {data,error}=await withTimeout(sb.auth.signUp({email:EMAIL(handle),password:pw}),CALL_MS);
+    const {data:taken,error:e0}=await sb.from('ad_profiles').select('uid').eq('handle',handle).maybeSingle();
+    if(e0)return {ok:false,why:e0.message};
+    if(taken)return {ok:false,why:'handle already taken'};
+    const {data,error}=await withTimeout(sb.auth.signUp({email:EMAIL(handle),password:pw,options:{data:{handle}}}),CALL_MS);
     if(error)return {ok:false,why:error.message};
     if(!data.session)return {ok:false,why:'email confirmation required'};
-    const {error:e2}=await sb.from('ad_profiles').insert({uid:data.user.id,handle});
-    if(e2){await sb.auth.signOut();return {ok:false,why:/duplicate/i.test(e2.message)?'handle already taken':e2.message};}
     SRV.me=data.user;
     await loadProfile();
     if(meCb)meCb();
@@ -111,6 +119,44 @@ export async function signOut(){
   await sb.auth.signOut();
   SRV.me=null;SRV.profile=null;SRV.oppUid=null;
   if(meCb)meCb();
+}
+
+/* ---------- per-account assets: wallet + equipped cosmetics ---------- */
+
+const rowToWallet=r=>r?{coins:r.coins,ledger:[],purchases:r.purchases||[],premium:!!r.premium,
+  passXp:r.pass_xp,passClaimed:r.pass_claimed||[],passSeason:r.pass_season,lastLogin:r.last_login||0}:null;
+const rowToEquip=r=>r?{skin:r.skin,throne:r.throne,victory:r.victory,board:r.board,clock:r.clock}:null;
+
+export async function fetchAssets(){
+  if(!SRV.ok||!SRV.me)return null;
+  try{
+    const [{data:w,error:ew},{data:e,error:ee}]=await Promise.all([
+      sb.from('ad_wallet').select('*').eq('uid',SRV.me.id).maybeSingle(),
+      sb.from('ad_equip').select('*').eq('uid',SRV.me.id).maybeSingle(),
+    ]);
+    if(ew||ee)throw ew||ee;
+    return {wallet:rowToWallet(w),equip:rowToEquip(e)};
+  }catch(e){
+    markOffline('asset read failed: '+e.message);
+    return null;
+  }
+}
+
+export async function pushWallet(w){
+  if(!SRV.ok||!SRV.me)return false;
+  const {error}=await sb.from('ad_wallet').upsert({uid:SRV.me.id,coins:w.coins,purchases:w.purchases||[],
+    premium:!!w.premium,pass_xp:w.passXp,pass_claimed:w.passClaimed||[],pass_season:w.passSeason,
+    last_login:String(w.lastLogin||''),updated_at:new Date().toISOString()});
+  if(error)markOffline('wallet write failed: '+error.message);
+  return !error;
+}
+
+export async function pushEquip(e){
+  if(!SRV.ok||!SRV.me)return false;
+  const {error}=await sb.from('ad_equip').upsert({uid:SRV.me.id,skin:e.skin,throne:e.throne,
+    victory:e.victory,board:e.board,clock:e.clock,updated_at:new Date().toISOString()});
+  if(error)markOffline('loadout write failed: '+error.message);
+  return !error;
 }
 
 export async function reportMatch(opponentUid,result,nonce){

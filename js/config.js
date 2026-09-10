@@ -16,13 +16,17 @@ const getEnv = (key, fallback) => {
 // set window.__AD_CONFIG__ = {SRV_URL:'https://xyz.supabase.co',SRV_ANON:'...'} before this module loads.
 const runtime = (typeof window !== 'undefined' && window.__AD_CONFIG__) || {};
 
+// Private/loopback hosts are assumed to be running `supabase start` on this machine,
+// so a LAN IP reaches the same stack as 127.0.0.1 does. Public hosts stay offline
+// unless SUPABASE_URL or window.__AD_CONFIG__ says otherwise.
+const PRIVATE_HOST=/^(127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|localhost$|.*\.local$|^\[?::1\]?$)/i;
+
 const getSupabaseUrl = () => {
   const env = getEnv('SUPABASE_URL', null);
   if (env) return String(env).replace(/\/+$/, '');
   // 54321 is the local `supabase start` API port — it only exists on the dev machine
-  if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
-    return 'http://127.0.0.1:54321';
-  }
+  const host = (typeof location !== 'undefined' && location.hostname) || '';
+  if (PRIVATE_HOST.test(host)) return 'http://' + host + ':54321';
   // No project configured (e.g. deployed to a static host) -> backend stays offline
   return null;
 };

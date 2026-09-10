@@ -1,4 +1,8 @@
 import {owns} from './economy.js';
+import {keyFor,emit} from './scope.js';
+
+const EKEY='ad-equip';
+const EQUIP_DEFAULTS={skin:'default',throne:'default',victory:'default',board:'island',clock:'auto'};
 
 export const SKINS={
   default:{name:'Terra Sigil',price:0,params:{}},
@@ -53,16 +57,22 @@ for(const cat of[SKINS,THRONES,VICTORIES,THEMEPACKS,BOARDS,CLOCKS]){
 
 export function getEquip(){
   try{
-    const e=JSON.parse(localStorage.getItem('ad-equip')||'null');
-    if(e)return {skin:'default',throne:'default',victory:'default',board:'island',clock:'auto',...e};
+    const e=JSON.parse(localStorage.getItem(keyFor(EKEY))||'null');
+    if(e)return {...EQUIP_DEFAULTS,...e};
   }catch(e){}
-  return {skin:'default',throne:'default',victory:'default',board:'island',clock:'auto'};
+  return {...EQUIP_DEFAULTS};
 }
 export function setEquip(slot,id){
   const e=getEquip();
   e[slot]=id;
-  try{localStorage.setItem('ad-equip',JSON.stringify(e));}catch(err){}
+  try{localStorage.setItem(keyFor(EKEY),JSON.stringify(e));}catch(err){}
+  emit('equip',e);
 }
+/* server -> cache, without bouncing a write back to the server */
+export function hydrateEquip(e){
+  try{localStorage.setItem(keyFor(EKEY),JSON.stringify({...EQUIP_DEFAULTS,...(e||{})}));}catch(err){}
+}
+export const freshEquip=()=>({...EQUIP_DEFAULTS});
 export function unlocked(itemId){
   if(itemId==='default'||FREE_IDS.has(itemId))return true;
   return owns(itemId);

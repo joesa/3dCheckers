@@ -1,14 +1,34 @@
 import {dayKey} from './puzzles.js';
+import {keyFor,keyOf,emit} from './scope.js';
 
 const KEY='ad-wallet';
+const blank=()=>({coins:300,ledger:[],purchases:[],premium:false,passXp:0,passClaimed:[],passSeason:'s1',lastLogin:0});
+
 export function getWallet(){
   try{
-    const w=JSON.parse(localStorage.getItem(KEY)||'null');
+    const w=JSON.parse(localStorage.getItem(keyFor(KEY))||'null');
     if(w&&typeof w.coins==='number')return w;
   }catch(e){}
-  return {coins:300,ledger:[],purchases:[],premium:false,passXp:0,passClaimed:[],passSeason:'s1',lastLogin:0};
+  return blank();
 }
-export function saveWallet(w){try{localStorage.setItem(KEY,JSON.stringify(w));}catch(e){}}
+export function saveWallet(w){
+  try{localStorage.setItem(keyFor(KEY),JSON.stringify(w));}catch(e){}
+  emit('wallet',w);
+}
+/* server -> cache, without bouncing a write back to the server */
+export function hydrateWallet(w){
+  try{localStorage.setItem(keyFor(KEY),JSON.stringify(w||blank()));}catch(e){}
+}
+export function freshWallet(){return blank();}
+/* the unscoped pre-account bucket, for one-time adoption into a new account */
+export function readGuestWallet(){
+  try{
+    const w=JSON.parse(localStorage.getItem(keyOf(KEY,null))||'null');
+    if(w&&typeof w.coins==='number')return w;
+  }catch(e){}
+  return null;
+}
+export function forgetGuestWallet(){try{localStorage.removeItem(keyOf(KEY,null));}catch(e){}}
 
 export function addCoins(n,reason){
   const w=getWallet();
@@ -68,10 +88,10 @@ export const PROVIDER={
 PROVIDER.checkoutSync=(itemId,usd)=>{throw new Error('use provider.checkout promise');};
 
 export function doneDaily(key){
-  try{return !!localStorage.getItem('ad-once-'+key+'-'+dayKey());}catch(e){return false;}
+  try{return !!localStorage.getItem(keyFor('ad-once')+'-'+key+'-'+dayKey());}catch(e){return false;}
 }
 export function dailyOnce(key,fn){
-  const k='ad-once-'+key+'-'+dayKey();
+  const k=keyFor('ad-once')+'-'+key+'-'+dayKey();
   try{if(localStorage.getItem(k))return false;}catch(e){return false;}
   try{localStorage.setItem(k,'1');}catch(e){}
   fn();
@@ -121,13 +141,13 @@ export function claimPass(tierIdx){
 
 /* ---------- daily login bonus ---------- */
 export function getDailyBonus(){
-  const w=getWallet();
   const today=dayKey();
+  const w=getWallet();
   if(w.lastLogin===today)return 0;
   const bonus=50+Math.min(5,w.purchases.length)*10;
-  addCoins(bonus,'daily-login');
   w.lastLogin=today;
   saveWallet(w);
+  addCoins(bonus,'daily-login');
   return bonus;
 }
 

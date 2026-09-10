@@ -12,8 +12,8 @@ import {GAUNTLET_ROUNDS,rollDaily,gauntletState,saveGauntlet,roundReward,clearRe
 import {buildCode,parseCode,openViewer} from './replay.js';
 import * as ECO from './economy.js';
 import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog} from './cosmetics.js';
-import {Auth,signUp as authSignUp,signIn as authSignIn,signOut as authSignOut,reportMatch as authReportMatch,ladder as authLadder} from './auth.js';
-import {onMeChange,SRV,srvInit} from './srv.js';
+import {Auth,signUp as authSignUp,signIn as authSignIn,signOut as authSignOut,reportMatch as authReportMatch,ladder as authLadder,onAuthChange,onAssetsChange,flushAssets} from './auth.js';
+import {SRV,srvInit,srvReconnect} from './srv.js';
 
 const $=s=>document.querySelector(s);
 const show=(el,on)=>el.classList.toggle('hidden',!on);
@@ -1465,7 +1465,15 @@ function updateAuthUI(){
     show($('#profile-line'),false);
   }
 }
-onMeChange(updateAuthUI);
+function applyLoadout(){
+  const eq=getEquip();
+  const skin=unlocked(eq.skin)?eq.skin:'default';
+  world.reskin(skin,(SKINS[skin]||{}).params||{});
+  buildActors();
+  refreshEnvLook();
+}
+onAuthChange(updateAuthUI);
+onAssetsChange(()=>{refreshWallet();applyLoadout();});
 
 function openAuth(){
   const st=$('#auth-status');
@@ -1474,7 +1482,7 @@ function openAuth(){
     st.textContent='Signed in as @'+String(Auth.me.id).replace(/^local:/,'')+' on this device';
     return;
   }
-  st.textContent=SRV.ok?'':'Local mode \u2014 the account lives in this browser';
+  st.textContent=SRV.ok?'':'Local mode \u2014 '+(SRV.why||'backend unreachable')+' \u00B7 accounts live in this browser only';
   show($('#menu'),false);
   show($('#auth'),true);
 }
@@ -1740,11 +1748,15 @@ window.addEventListener('offline',()=>{
 });
 
 window.addEventListener('online',()=>{
-  if(SRV.ok){
-    toast('Back online — syncing with server','good');
-    srvInit();
-  }
+  toast('Back online — reconnecting','good');
+  srvReconnect().then(ok=>{
+    if(ok)toast('Syncing with server','good');
+    else toast('Still offline — play continues locally','bad');
+  });
 });
+
+window.addEventListener('pagehide',()=>{flushAssets();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushAssets();});
 
 window.__aether={G,world,GAME,playMove,refreshMoves,rigs,
   eco:ECO,doEmote,startPuzzle,startGauntlet,gvRound,openShop,showTaunt,buildCode,parseCode,
