@@ -9,7 +9,8 @@
     "test:ui": "vitest --ui"
   },
   "devDependencies": {
-    "vitest": "^1.6.0",
-    "@vitest/ui": "^1.6.0"
+    "@vitest/ui": "^1.6.0",
+    "supabase": "^2.117.0",
+    "vitest": "^1.6.0"
   }
 }
