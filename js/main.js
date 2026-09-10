@@ -988,6 +988,10 @@ function doRematch(){
 $('#btn-rematch').onclick=doRematch;
 $('#b-rematch2').onclick=doRematch;
 $('#b-back').onclick=()=>location.reload();
+$('#auth-form').onsubmit=e=>{
+  e.preventDefault();
+  $('#b-auth-signin').click();
+};
 $('#chat-form').onsubmit=e=>{
   e.preventDefault();
   sendChat($('#chat-input').value);

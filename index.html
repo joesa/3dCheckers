@@ -232,16 +232,18 @@
   <div class="panel glass">
     <h2 id="auth-title">Duelist Identity</h2>
     <p class="tag" id="auth-sub">Sign in to climb the Great Ladder, keep cosmetics across devices, and challenge by nickname. Without an account everything still plays — ranked features stay off.</p>
-    <label>Handle</label>
-    <input type="text" id="auth-handle" maxlength="18" placeholder="StormRider"/>
-    <label>Password</label>
-    <input type="password" id="auth-pass" maxlength="64" placeholder="••••••••"/>
-    <div class="status" id="auth-status"></div>
-    <div class="menu-btns">
-      <button class="btn primary" id="b-auth-signin">Sign In</button>
-      <button class="btn" id="b-auth-signup">Create</button>
-      <button class="btn ghost" id="b-auth-off">Play Incognito</button>
-    </div>
+    <form id="auth-form">
+      <label>Handle</label>
+      <input type="text" id="auth-handle" maxlength="18" placeholder="StormRider"/>
+      <label>Password</label>
+      <input type="password" id="auth-pass" maxlength="64" placeholder="••••••••"/>
+      <div class="status" id="auth-status"></div>
+      <div class="menu-btns">
+        <button type="submit" class="btn primary" id="b-auth-signin">Sign In</button>
+        <button type="button" class="btn" id="b-auth-signup">Create</button>
+        <button type="button" class="btn ghost" id="b-auth-off">Play Incognito</button>
+      </div>
+    </form>
   </div>
 </div>
 
