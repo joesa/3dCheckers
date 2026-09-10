@@ -13,6 +13,7 @@ import {buildCode,parseCode,openViewer} from './replay.js';
 import * as ECO from './economy.js';
 import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog} from './cosmetics.js';
 import {Auth,signUp as authSignUp,signIn as authSignIn,signOut as authSignOut,reportMatch as authReportMatch,ladder as authLadder} from './auth.js';
+import {onMeChange} from './srv.js';
 
 const $=s=>document.querySelector(s);
 const show=(el,on)=>el.classList.toggle('hidden',!on);
