@@ -12,27 +12,31 @@ const getEnv = (key, fallback) => {
   return fallback;
 };
 
+// Runtime override for static deploys where no bundler inlines import.meta.env:
+// set window.__AD_CONFIG__ = {SRV_URL:'https://xyz.supabase.co',SRV_ANON:'...'} before this module loads.
+const runtime = (typeof window !== 'undefined' && window.__AD_CONFIG__) || {};
+
 const getSupabaseUrl = () => {
+  const env = getEnv('SUPABASE_URL', null);
+  if (env) return String(env).replace(/\/+$/, '');
+  // 54321 is the local `supabase start` API port — it only exists on the dev machine
   if (location.hostname === '127.0.0.1' || location.hostname === 'localhost') {
     return 'http://127.0.0.1:54321';
   }
-  // For HTTPS sites, use relative URL for supabase to avoid mixed content
-  if (location.protocol === 'https:') {
-    return window.location.origin + ':54321';
-  }
-  return getEnv('SUPABASE_URL', `http://${location.hostname}:54321`);
+  // No project configured (e.g. deployed to a static host) -> backend stays offline
+  return null;
 };
 
 export const CONFIG = {
   // TURN server for WebRTC
-  TURN_HOST: getEnv('TURN_HOST', '172.16.0.107'),
-  TURN_PORT: parseInt(getEnv('TURN_PORT', '3478')) || 3478,
-  TURN_USER: getEnv('TURN_USER', 'aether'),
-  TURN_CRED: getEnv('TURN_CRED', 'devturnpass123'),
+  TURN_HOST: runtime.TURN_HOST || getEnv('TURN_HOST', '172.16.0.107'),
+  TURN_PORT: parseInt(runtime.TURN_PORT || getEnv('TURN_PORT', '3478')) || 3478,
+  TURN_USER: runtime.TURN_USER || getEnv('TURN_USER', 'aether'),
+  TURN_CRED: runtime.TURN_CRED || getEnv('TURN_CRED', 'devturnpass123'),
 
   // Supabase
-  SRV_URL: getSupabaseUrl(),
-  SRV_ANON: getEnv('SUPABASE_ANON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'),
+  SRV_URL: runtime.SRV_URL != null ? String(runtime.SRV_URL).replace(/\/+$/, '') : getSupabaseUrl(),
+  SRV_ANON: runtime.SRV_ANON || getEnv('SUPABASE_ANON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'),
 
   // Game balance constants
   TURN_TIMEOUT_MS: parseInt(getEnv('TURN_TIMEOUT_MS', '45000')) || 45000,

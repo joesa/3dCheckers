@@ -27,7 +27,7 @@ function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
 
 // Initialize auth on boot
-Auth.init();
+Auth.init().then(()=>updateAuthUI());
 
 // Create world - must be before Auth.init() completes if it triggers world usage
 const world=createWorld($('#gl'),lsGet('ad-theme')||DEFAULT_THEME);
@@ -990,7 +990,8 @@ $('#b-rematch2').onclick=doRematch;
 $('#b-back').onclick=()=>location.reload();
 $('#auth-form').onsubmit=e=>{
   e.preventDefault();
-  $('#b-auth-signin').click();
+  sfx.click();
+  authDo(authSignIn);
 };
 $('#chat-form').onsubmit=e=>{
   e.preventDefault();
@@ -1443,12 +1444,21 @@ $('#b-gauntlet').onclick=()=>{sfx.click();startGauntlet();};
 
 /* ================= accounts & ladder ================= */
 
+function signedIn(){
+  return (SRV.ok&&SRV.me)||(Auth.ok&&Auth.me);
+}
+function currentProfile(){
+  if(SRV.ok&&SRV.me)return SRV.profile;
+  if(Auth.ok&&Auth.me)return Auth.profile;
+  return null;
+}
 function updateAuthUI(){
   const btn=$('#b-auth');
-  if(SRV.ok&&SRV.me&&SRV.profile){
+  const me=signedIn(),p=currentProfile();
+  if(me&&p){
     btn.textContent='Sign Out';
-    const p=SRV.profile;
-    $('#profile-line').innerHTML='@'+p.handle+' &middot; <b>'+p.elo+'</b> elo &middot; '+p.wins+'W / '+p.losses+'L';
+    const handle=p.handle||(String(me.id).replace(/^local:/,''));
+    $('#profile-line').innerHTML='@'+handle+' &middot; <b>'+p.elo+'</b> elo &middot; '+p.wins+'W / '+p.losses+'L';
     show($('#profile-line'),true);
   }else{
     btn.textContent='Sign In';
@@ -1458,37 +1468,49 @@ function updateAuthUI(){
 onMeChange(updateAuthUI);
 
 function openAuth(){
-  if(!SRV.ok && !Auth.ok){
-    // Allow local auth even without backend
-    $('#auth-status').textContent='';
-    $('#auth-status').className='status';
-    show($('#menu'),false);
-    show($('#auth'),true);
+  const st=$('#auth-status');
+  st.className='status';
+  if(!SRV.ok&&Auth.ok&&Auth.me){
+    st.textContent='Signed in as @'+String(Auth.me.id).replace(/^local:/,'')+' on this device';
     return;
   }
-  if(!SRV.ok){toast('Backend offline \u2014 start the Supabase stack to sign in');return;}
-  $('#auth-status').textContent='';
-  $('#auth-status').className='status';
+  st.textContent=SRV.ok?'':'Local mode \u2014 the account lives in this browser';
   show($('#menu'),false);
   show($('#auth'),true);
 }
+async function doSignOut(){
+  await authSignOut();
+  updateAuthUI();
+  toast('Signed out','good');
+}
+let authBusy=false;
 async function authDo(fn){
+  if(authBusy)return;
   const h=$('#auth-handle').value.trim(),p=$('#auth-pass').value;
   const st=$('#auth-status');
+  authBusy=true;
   st.textContent='Summoning\u2026';
   st.className='status';
-  const r=await fn(h,p);
-  if(r.ok){
+  let r;
+  try{
+    r=await fn(h,p);
+  }finally{
+    authBusy=false;
+  }
+  if(r&&r.ok){
+    st.textContent='';
+    st.className='status';
+    $('#auth-pass').value='';
     show($('#auth'),false);show($('#menu'),true);
+    updateAuthUI();
     toast('Welcome, '+h,'good');
     sfx.join();
   }else{
-    st.textContent=r.why;
+    st.textContent=r?r.why:'something went wrong';
     st.className='status err';
   }
 }
-$('#b-auth').onclick=()=>{sfx.click();openAuth();};
-$('#b-auth-signin').onclick=()=>{sfx.click();authDo(authSignIn);};
+$('#b-auth').onclick=()=>{sfx.click();if(signedIn())doSignOut();else openAuth();};
 $('#b-auth-signup').onclick=()=>{sfx.click();authDo(authSignUp);};
 $('#b-auth-off').onclick=()=>{sfx.click();show($('#auth'),false);if(!G.started)show($('#menu'),true);};
 

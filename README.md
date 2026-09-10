@@ -26,7 +26,7 @@ The game runs 100% without it — these features just hide themselves. With it y
    # hosted: paste supabase/schema.sql into the SQL editor
    ```
 
-2. Point `js/srv.js` at your project — `SRV_URL` already uses `http://<page-host>:54321` for local play; replace `SRV_ANON` with your project URL/anon key for production (the anon key is public; RLS protects the data).
+2. Point the client at your project with `VITE_SUPABASE_URL` + `VITE_SUPABASE_ANON` (the anon key is public; RLS protects the data). With no env set, `SRV_URL` only defaults to `http://127.0.0.1:54321` when the page itself is served from `localhost`/`127.0.0.1` — any other host (e.g. a Vercel deploy) stays offline instead of calling a dead `:54321`.
 
 3. Sign up in-game (**Sign In → Create**). Handles map to synthetic emails (`handle@aether.local`); with local Supabase mail autoconfirmation is on.
 
@@ -43,6 +43,14 @@ The site is 100% static — `index.html`, `css/`, `js/`, plus `three` loaded fro
 | **itch.io** | Zip the folder, upload as an HTML game, set "played in browser". Great for indie distribution. |
 
 Then share the URL. Each duo connects by exchanging an invite code over any chat app — there is no game server to run or pay for.
+
+The deploy is plain static files, so `VITE_*` env vars are only baked in if a bundler runs. To point a static host at a hosted Supabase without adding a build step, drop this above the module script in `index.html`:
+
+```html
+<script>window.__AD_CONFIG__={SRV_URL:'https://YOUR-PROJECT.supabase.co',SRV_ANON:'your-anon-key'};</script>
+```
+
+Without it (or `VITE_SUPABASE_URL`), a non-localhost deploy simply runs on offline local accounts — sign-up/sign-in still work, per browser.
 
 ### TURN relay (coturn) for strict/symmetric NATs
 

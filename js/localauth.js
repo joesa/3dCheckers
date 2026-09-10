@@ -1,7 +1,8 @@
 // Local account system for when Supabase is unavailable
-// Stores user data encrypted in localStorage
-const KEY='ad-local-auth';
-const USERKEY='ad-user-data';
+// Stores user data obfuscated in localStorage (multi-user, survives sign-out)
+const KEY='ad-local-auth-v2';
+const CUR='ad-local-auth-current';
+const OLD='ad-local-auth';
 
 function encrypt(data,secret){
   try{
@@ -36,57 +37,96 @@ function getSecret(){
   return 'aether-local-auth-secret-v1';
 }
 
-export function getLocalUser(){
+const slot=h=>String(h||'').toLowerCase();
+
+function readStore(){
   try{
     const token=localStorage.getItem(KEY);
-    if(!token)return null;
-    return decrypt(token,getSecret());
-  }catch(e){return null;}
+    if(token){
+      const s=decrypt(token,getSecret());
+      if(s&&s.users)return s;
+    }
+    // migrate the old single-slot record
+    const legacy=localStorage.getItem(OLD);
+    if(legacy){
+      const u=decrypt(legacy,getSecret());
+      if(u&&u.handle){
+        const s={users:{[slot(u.handle)]:u}};
+        writeStore(s);
+        localStorage.setItem(CUR,slot(u.handle));
+        localStorage.removeItem(OLD);
+        return s;
+      }
+    }
+  }catch(e){}
+  return {users:{}};
 }
 
-export function setLocalUser(handle,pw,profile){
+function writeStore(store){
   try{
-    const token=encrypt({handle,pw,profile},getSecret());
-    if(token)localStorage.setItem(KEY,token);
+    const token=encrypt(store,getSecret());
+    if(!token)return false;
+    localStorage.setItem(KEY,token);
     return true;
   }catch(e){return false;}
 }
 
-export function clearLocalUser(){
-  try{localStorage.removeItem(KEY);}catch(e){}
+export function getLocalUser(handle){
+  const store=readStore();
+  const who=handle?slot(handle):localStorage.getItem(CUR);
+  return (who&&store.users[slot(who)])||null;
 }
+
+export function setLocalUser(handle,pw,profile){
+  const store=readStore();
+  const k=slot(handle);
+  if(!k)return false;
+  store.users[k]={handle,pw,profile};
+  if(!writeStore(store))return false;
+  localStorage.setItem(CUR,k);
+  return true;
+}
+
+export function clearLocalUser(){
+  try{localStorage.removeItem(CUR);}catch(e){}
+}
+
+export function listLocalUsers(){
+  const store=readStore();
+  return Object.values(store.users);
+}
+
+const freshProfile=()=>({elo:1200,wins:0,losses:0,coins:300,purchases:[],passXp:0,passSeason:'s1',passClaimed:[],lastLogin:0});
 
 export async function signUp(handle,pw){
   if(!/^[a-zA-Z0-9._-]{3,18}$/.test(handle))return {ok:false,why:'handle: 3–18 letters/digits/._-'};
   if((pw||'').length<8)return {ok:false,why:'password needs 8+ chars'};
-  
-  // Check if handle already exists
-  const existing=getLocalUser();
-  if(existing&&existing.handle.toLowerCase()===handle.toLowerCase()){
+
+  const store=readStore();
+  if(store.users[slot(handle)]){
     return {ok:false,why:'handle already taken'};
   }
-  
-  const profile={elo:1200,wins:0,losses:0,coins:300,purchases:[],passXp:0,passSeason:'s1',passClaimed:[],lastLogin:0};
-  if(setLocalUser(handle,pw,profile)){
+
+  store.users[slot(handle)]={handle,pw,profile:freshProfile()};
+  if(writeStore(store)){
+    localStorage.setItem(CUR,slot(handle));
     return {ok:true};
   }
   return {ok:false,why:'failed to save profile'};
 }
 
 export async function signIn(handle,pw){
-  const user=getLocalUser();
+  const store=readStore();
+  const user=store.users[slot(handle)];
   if(!user)return {ok:false,why:'user not found'};
-  if(user.handle.toLowerCase()!==handle.toLowerCase()){
-    return {ok:false,why:'user not found'};
-  }
   if(user.pw!==pw){
     return {ok:false,why:'incorrect password'};
   }
-  
+
   // Update last login
   user.profile.lastLogin=new Date().toISOString().split('T')[0];
   setLocalUser(user.handle,user.pw,user.profile);
-  
+
   return {ok:true,profile:user.profile};
 }
 
@@ -112,10 +152,10 @@ export async function reportMatch(opponent,result,nonce){
 }
 
 export async function ladder(limit=50){
-  // Local mode: return current user if they exist
-  const user=getLocalUser();
-  if(!user)return [];
-  return [{handle:user.handle,elo:user.profile.elo,wins:user.profile.wins,losses:user.profile.losses}];
+  return listLocalUsers()
+    .map(u=>({handle:u.handle,elo:u.profile.elo,wins:u.profile.wins,losses:u.profile.losses}))
+    .sort((a,b)=>b.elo-a.elo)
+    .slice(0,limit);
 }
 
 export async function createInvite(kind,meta){return {ok:false,why:'requires backend'};}
