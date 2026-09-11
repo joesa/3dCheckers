@@ -15,7 +15,7 @@ import * as ECO from './economy.js';
 import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,AVATARS,SHAPES,PALETTES,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog,avatarLook,armyPalette} from './cosmetics.js';
 import {Auth,signUp as authSignUp,signIn as authSignIn,signOut as authSignOut,reportMatch as authReportMatch,ladder as authLadder,onAuthChange,onAssetsChange,flushAssets} from './auth.js';
 import * as RET from './retention.js';
-import {SRV,srvInit,srvReconnect,corrCreate,corrJoin,corrDecline,corrResign,corrPost,corrList,corrGame,findHandle,follow,unfollow,rivals,corrStandings,corrQuickest,corrLongest,ladderWinrate,pushRegister,pushUnregister,duelOpen,duelAccept,duelAttest,stakeBalance,stakeClaimDaily,duelsOpen,betPools,betMine,betPlace,watchHeartbeat,watchRoster,watchLeave,createInvite,getInvite,pushMove,getMoves,getReactions,react as srvReact,newCode as srvNewCode} from './srv.js';
+import {SRV,srvInit,srvReconnect,corrCreate,corrJoin,corrDecline,corrResign,corrPost,corrList,corrGame,findHandle,follow,unfollow,rivals,corrStandings,corrQuickest,corrLongest,ladderWinrate,pushRegister,pushUnregister,duelOpen,duelAccept,duelAttest,stakeBalance,stakeClaimDaily,duelsOpen,betPools,betMine,betPlace,watchHeartbeat,watchRoster,watchLeave,createInvite,getInvite,patchInvite,pushMove,getMoves,getReactions,react as srvReact,newCode as srvNewCode} from './srv.js';
 import {corrState} from './corr.js';
 import {CONFIG} from './config.js';
 import {addTween} from './tween.js';
@@ -374,7 +374,7 @@ function endGame(winnerColor,resigned){
   if(isOnline()&&SRV.ok&&SRV.me&&SRV.oppUid&&G.myColor&&!G.gv&&G.state){
     const res=winnerColor===G.myColor?'win':'loss';
     const nonce=(SEED>>>0)*4096+(G.state.moveNo||0);
-    reportMatch(SRV.oppUid,res,nonce).then(r=>{
+    authReportMatch(SRV.oppUid,res,nonce).then(r=>{
       if(r&&r.data!=null&&r.elo!=null)toast('Ladder: '+r.elo+' \u2192 '+r.data+' elo','good');
     });
   }
