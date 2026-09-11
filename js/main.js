@@ -587,7 +587,7 @@ const WALK_FROM=-2.8,WALK_TO=-1.2;   // seat-local depth (behind the throne -> j
 const SEAT_RMIN=4.6,SEAT_RMAX=6.1,SEAT_BOARD=4.25; // placement ring + board clearance
 
 /* --- chair placement: drag your throne around the lawn before the duel --- */
-let placing=false,placeTeam=null,placeDrag=false;
+let placing=false,placeTeam=null,placeDrag=false,placeMove=false;
 const pDown=e=>placePointer('down',e),pMove=e=>placePointer('move',e),pUp=e=>placePointer('up',e);
 
 function seatValid(x,z){
@@ -635,24 +635,27 @@ function placementCamera(){
     controls.target.set(t0.x+(t1[0]-t0.x)*e,t0.y+(t1[1]-t0.y)*e,t0.z+(t1[2]-t0.z)*e);
   });
 }
-function beginPlace(){
+function beginPlace(opts){
+  opts=opts||{};
   const team=G.myColor||'red';
   placeTeam=team;
   const r=rigs[team];
   if(!r||!world.groundAt){runWalkIn();return;}
-  placing=true;G.busy=true;
-  setSeatPos(team,0,seats[team].z);
+  placing=true;placeMove=!!opts.move;G.busy=true;
+  let sx=0,sz=seats[team].z;
+  if(opts.keep&&anchors[team]){sx=anchors[team].position.x;sz=anchors[team].position.z;}
+  setSeatPos(team,sx,sz);
   r.person.visible=false;
-  world.showGhost(0,seats[team].z,true);
+  world.showGhost(sx,sz,true);
   placementCamera();
   const cv=$('#gl');
   cv.addEventListener('pointerdown',pDown);
   window.addEventListener('pointermove',pMove);
   window.addEventListener('pointerup',pUp);
   show($('#seat-place'),true);
-  $('#seat-place .sp-hint').textContent=G.mode==='hotseat'
-    ?'Drag the Ember throne onto the lawn'
-    :'Drag your throne onto the lawn';
+  $('#seat-place .sp-hint').textContent=opts.move
+    ?'Drag your throne to a new spot, then sit'
+    :(G.mode==='hotseat'?'Drag the Ember throne onto the lawn':'Drag your throne onto the lawn');
   $('#b-seat-done').onclick=()=>{sfx.click();endPlace();};
 }
 function endPlace(){
@@ -665,7 +668,18 @@ function endPlace(){
   world.hideGhost();
   show($('#seat-place'),false);
   const r=rigs[placeTeam];if(r)r.person.visible=true;
+  if(placeMove){endSeatMove();return;}
   runWalkIn();
+}
+function endSeatMove(){
+  placeMove=false;
+  const r=rigs[placeTeam];
+  if(r){r.person.visible=true;r.setStand(0);r.setWalk(0);r.person.position.set(0,0,0);}
+  const cam=world.cam;
+  if(cam){cam.controls.enabled=true;cam.controls.autoRotate=false;}
+  if(world.refit)world.refit();
+  G.busy=false;
+  updateHUD();
 }
 
 function seatWalkIn(team){
@@ -738,6 +752,7 @@ function enterMatch(){
   show($('#wallet-chip'),true);
   show($('#btn-wager'),isOnline());
   show($('#btn-watch'),isOnline()&&SRV.ok&&!G.watchCode);
+  show($('#btn-move-seat'),!!G.myColor&&G.mode!=='watch');
   refreshWallet();
   const btn=$('#b-rematch2');
   btn.textContent='Rematch';
@@ -1454,6 +1469,11 @@ $('#b-corr').onclick=()=>{sfx.click();corrMenu();};
 $('#b-howto').onclick=()=>{sfx.click();show($('#menu'),false);show($('#howto'),true);};
 $('#b-howto-close').onclick=()=>{sfx.click();show($('#howto'),false);show($('#menu'),true);};
 $('#btn-quit').onclick=()=>location.reload();
+$('#btn-move-seat').onclick=()=>{
+  if(!G.started||G.over||G.pz||G.gv||!G.myColor||placing||opening)return;
+  sfx.click();
+  beginPlace({keep:true,move:true});
+};
 $('#btn-sound').onclick=e=>{
   const on=!sfx.enabled;
   sfx.setEnabled(on);
