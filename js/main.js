@@ -112,7 +112,7 @@ const G={
   duelId:null,
   behind:false, deficit:0,
   fog:false,
-  dispName:{red:'Ember',black:'Frost'}, watchNames:null,
+  dispName:{red:'Ember',black:'Frost'}, watchNames:null, revealed:false,
 };
 const isOnline=()=>G.mode==='host'||G.mode==='guest';
 let roomTheme=DEFAULT_THEME;
@@ -120,6 +120,7 @@ let roomTheme=DEFAULT_THEME;
 /* ================= rendering ================= */
 
 function applyFog(){
+  if(G.revealed){world.setFog(null);return;}
   if(G.fog&&(G.mode==='ai'||G.mode==='hotseat')&&G.state){
     const viewer=G.mode==='ai'?(G.myColor||GAME.RED):G.state.turn;
     world.setFog(visibleSet(G.state.board,viewer),viewer);
@@ -377,6 +378,19 @@ function endGame(winnerColor,resigned){
       if(r&&r.data!=null&&r.elo!=null)toast('Ladder: '+r.elo+' \u2192 '+r.data+' elo','good');
     });
   }
+  scheduleFogReplay();
+}
+
+function scheduleFogReplay(){
+  if(!(G.fog&&(G.mode==='ai'||G.mode==='hotseat'))||G.record.length===0||G.gv||G.pz)return;
+  setTimeout(()=>{
+    G.revealed=true;applyFog();
+    show($('#result'),false);
+    setTimeout(()=>{
+      const code=buildCode(G.record,SEED,G.mode);
+      openViewer(GAME,world,code,()=>show($('#result'),true),{autoplay:true,noHud:true});
+    },1700);
+  },1300);
 }
 
 function gauntletEnd(winnerColor){
@@ -405,6 +419,7 @@ function gauntletEnd(winnerColor){
 function resetMatch(){
   G.state=GAME.initialState();
   G.over=false;G.busy=false;
+  G.revealed=false;
   G.record=[];
   G.duelId=null;G._stakeWait=false;G.wagerN=0;
   G.clockInited=false;
@@ -1608,12 +1623,12 @@ function showTaunt(text){
 
 /* ================= dialogs ================= */
 
-function askText(title,sub,placeholder,okLabel){
+function askText(title,sub,placeholder,okLabel,def){
   return new Promise(res=>{
     $('#dlg-title').textContent=title;
     $('#dlg-sub').textContent=sub;
     const inp=$('#dlg-input');
-    inp.value='';
+    inp.value=def||'';
     inp.placeholder=placeholder||'Paste here…';
     inp.classList.remove('hidden');
     $('#dlg-ok').textContent=okLabel||'Go';
@@ -1803,14 +1818,22 @@ function showModeBanner(t){
 
 /* ================= replay ================= */
 
-$('#b-replay-code').onclick=()=>copyText(buildCode(G.record,SEED,G.mode));
-$('#b-replay').onclick=async()=>{
-  sfx.click();
-  const t=await askText('Watch a Replay','Paste a duel replay code to relive it on the island.','Replay code\u2026','Watch');
+async function openReplayModal(code,opts){
+  opts=opts||{};
+  const t=await askText('Watch a Replay','Paste a duel replay code to relive it on the island.','Replay code\u2026','Watch',code||'');
   if(!t)return;
   if(!parseCode(t)){toast('That is not a valid replay code','bad');return;}
-  show($('#menu'),false);
-  openViewer(GAME,world,t,()=>location.reload());
+  if(!opts.keepResult)show($('#menu'),false);
+  openViewer(GAME,world,t,opts.onExit||(()=>location.reload()),{autoplay:true,noHud:!!opts.keepResult});
+}
+$('#b-replay-code').onclick=()=>{
+  const code=buildCode(G.record,SEED,G.mode);
+  copyText(code);
+  openReplayModal(code,{keepResult:true,onExit:()=>show($('#result'),true)});
+};
+$('#b-replay').onclick=async()=>{
+  sfx.click();
+  await openReplayModal('');
 };
 
 /* ================= wallet & shop ================= */

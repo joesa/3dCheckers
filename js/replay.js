@@ -10,7 +10,8 @@ export function parseCode(code){
   }catch(e){return null;}
 }
 
-export function openViewer(GAME,world,code,onExit){
+export function openViewer(GAME,world,code,onExit,opts){
+  opts=opts||{};
   const data=parseCode(code);
   if(!data)return false;
   const el=document.getElementById('replay');
@@ -76,9 +77,10 @@ export function openViewer(GAME,world,code,onExit){
   document.getElementById('rp-close').onclick=()=>{
     playing=false;
     el.classList.add('hidden');
-    hud.classList.remove('hidden');
+    if(!opts.noHud)hud.classList.remove('hidden');
     if(onExit)onExit();
   };
   paint();
+  if(opts.autoplay){playing=true;paint();loop();}
   return true;
 }
