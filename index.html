@@ -26,6 +26,7 @@
   <div id="turn-card" class="glass">
     <div id="turn-emblem"></div>
     <div id="turn-text">…</div>
+    <div id="turn-meta"><span id="move-count">Move 1</span><span id="timer-secs" class="hidden">0:30</span></div>
     <div id="timer-wrap" class="hidden"><div id="timer-bar"></div></div>
     <div id="clocks" class="hidden">
       <span id="clk-red" class="clk red">0:00</span><span class="clksep">·</span><span id="clk-black" class="clk black">0:00</span>
@@ -54,6 +55,11 @@
     <button class="emote" data-e="laugh" title="Laugh (3)">😈</button>
     <button class="emote" data-e="bow" title="Bow (4)">🙇</button>
     <button class="emote" data-e="taunt" title="Taunt (5)">👑</button>
+  </div>
+
+  <div id="seat-place" class="glass hidden">
+    <span class="sp-hint">Drag your throne onto the lawn</span>
+    <button id="b-seat-done" class="btn primary">Take your seat</button>
   </div>
 
   <div id="side-btns">
@@ -91,9 +97,14 @@
       <button class="btn" id="b-gauntlet">Daily Gauntlet</button>
       <button class="btn" id="b-online">Online Duel (WebRTC)</button>
       <button class="btn" id="b-local">Same-Browser Tabs</button>
+      <button class="btn" id="b-corr">Correspondence (any device)</button>
       <div class="menu-row2">
         <button class="btn small" id="b-shop">Marketplace</button>
         <button class="btn small" id="b-ladder">Ladder</button>
+        <button class="btn small" id="b-rivals">Rivals</button>
+        <button class="btn small" id="b-boards">Leaderboards</button>
+        <button class="btn small" id="b-bets">Betting</button>
+        <button class="btn small" id="b-hub">Daily &amp; Profile</button>
         <button class="btn small" id="b-replay">Watch Replay</button>
         <button class="btn small" id="b-auth">Sign In</button>
       </div>
@@ -214,8 +225,17 @@
     <h2 id="pz-title"></h2>
     <p id="pz-sub"></p>
     <div class="menu-btns">
+      <button class="btn" id="pz-share" style="display:none">Share Card</button>
       <button class="btn primary" id="pz-btn">Continue</button>
     </div>
+  </div>
+</div>
+
+<div id="hub" class="overlay hidden">
+  <div class="panel glass">
+    <h2>Daily &amp; Profile</h2>
+    <div id="hub-body" class="hub"></div>
+    <div class="menu-btns"><button class="btn primary" id="b-hub-close">Close</button></div>
   </div>
 </div>
 

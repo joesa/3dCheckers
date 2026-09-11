@@ -42,6 +42,10 @@ export const CONFIG = {
   SRV_URL: runtime.SRV_URL != null ? String(runtime.SRV_URL).replace(/\/+$/, '') : getSupabaseUrl(),
   SRV_ANON: runtime.SRV_ANON || getEnv('SUPABASE_ANON', 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6ImFub24iLCJleHAiOjE5ODM4MTI5OTZ9.CRXP1A7WOeoJeXxjNni43kdQwgnWNReilDMblYTn_I0'),
 
+  // Web push (VAPID application server public key). Empty until provisioned with
+  // `npx web-push generate-vapid-keys`; the private key lives only in the sender.
+  PUSH_PUBLIC_KEY: runtime.PUSH_PUBLIC_KEY || getEnv('PUSH_PUBLIC_KEY', ''),
+
   // Game balance constants
   TURN_TIMEOUT_MS: parseInt(getEnv('TURN_TIMEOUT_MS', '45000')) || 45000,
   BLIZZING_TURN_MS: parseInt(getEnv('BLIZZING_TURN_MS', '15000')) || 15000,

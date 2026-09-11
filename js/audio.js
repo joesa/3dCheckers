@@ -1,4 +1,6 @@
 let ctx=null,master=null,enabled=true;
+let musicGain=null,musicOn=false,mTimer=null,mStep=0,mNext=0,mUnlocked=false;
+const MUSIC_LEVEL=.5;
 
 function ac(){
   if(!ctx){
@@ -8,6 +10,9 @@ function ac(){
     master=ctx.createGain();
     master.gain.value=.22;
     master.connect(ctx.destination);
+    musicGain=ctx.createGain();
+    musicGain.gain.value=0;
+    musicGain.connect(ctx.destination);
   }
   if(ctx.state==='suspended')ctx.resume();
   return ctx;
@@ -43,8 +48,69 @@ function noise({dur=.2,f=1200,q=1,g=.6,delay=0}={}){
   src.start(t0);
 }
 
+/* ---------------- ambient background music (procedural, asset-free) ---------------- */
+const PROG=[
+  [110.00,[220.00,261.63,329.63]],  // Am · A2  A3 C4 E4
+  [ 87.31,[174.61,220.00,261.63]],  // F  · F2  F3 A3 C4
+  [130.81,[196.00,261.63,329.63]],  // C  · C3  G3 C4 E4
+  [ 98.00,[196.00,246.94,293.66]],  // G  · G2  G3 B3 D4
+];
+const STEP=(60/58)/2;               // eighth-note seconds (58 BPM)
+
+function mVoice(freq,t,dur,{type='sine',peak=.05,attack=.4}={}){
+  if(!ctx||!musicGain)return;
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.type=type;o.frequency.setValueAtTime(freq,t);
+  o.detune.setValueAtTime(Math.random()*8-4,t);
+  g.gain.setValueAtTime(.0001,t);
+  g.gain.linearRampToValueAtTime(peak,t+attack);
+  g.gain.setValueAtTime(peak,t+Math.max(attack+.05,dur*.55));
+  g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+  o.connect(g).connect(musicGain);
+  o.start(t);o.stop(t+dur+.1);
+}
+function mStepTick(step,t){
+  const [bass,chord]=PROG[(step/8|0)%PROG.length];
+  const beat=step%8, barLen=STEP*8;
+  if(beat===0){
+    mVoice(bass,t,barLen,{type:'sine',peak:.09,attack:1.1});
+    for(const f of chord)mVoice(f,t,barLen,{type:'triangle',peak:.045,attack:barLen*.4});
+  }
+  if(beat%2===0&&Math.random()<.68){
+    const pool=[...chord,...chord.map(f=>f*2)];
+    mVoice(pool[Math.random()*pool.length|0],t,STEP*1.7,{type:'sine',peak:.05,attack:.02});
+  }
+}
+function mTick(){
+  if(!ctx||!musicOn)return;
+  const ahead=ctx.currentTime+.35;
+  while(mNext<ahead){mStepTick(mStep,mNext);mStep=(mStep+1)%(8*PROG.length);mNext+=STEP;}
+}
+function mStart(){
+  const c=ac();if(!c||musicOn)return;
+  musicOn=true;mStep=0;mNext=c.currentTime+.15;
+  mTimer=setInterval(mTick,60);
+}
+function mStop(){musicOn=false;if(mTimer){clearInterval(mTimer);mTimer=null;}}
+function applyMusic(){
+  const c=ac();if(!c||!musicGain)return;
+  const on=enabled&&mUnlocked;
+  musicGain.gain.cancelScheduledValues(c.currentTime);
+  musicGain.gain.setTargetAtTime(on?MUSIC_LEVEL:0,c.currentTime,.9);
+  on?mStart():mStop();
+}
+
+export const music={
+  begin(){mUnlocked=true;applyMusic();},   // call on the first user gesture (unlocks autoplay policy)
+  setEnabled(b){enabled=b;applyMusic();},
+  suspend(){if(mTimer){clearInterval(mTimer);mTimer=null;}musicOn=false;},
+  resume(){if(enabled&&mUnlocked&&!musicOn)mStart();},
+  get enabled(){return enabled;},
+  get playing(){return musicOn&&mUnlocked&&enabled;},
+};
+
 export const sfx={
-  setEnabled(b){enabled=b;},
+  setEnabled(b){enabled=b;applyMusic();},
   get enabled(){return enabled;},
   click(){tone(520,{dur:.06,type:'triangle',g:.4});},
   select(){tone(660,{dur:.09,type:'triangle',g:.5});tone(880,{dur:.1,type:'triangle',g:.3,delay:.04});},

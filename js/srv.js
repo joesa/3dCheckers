@@ -221,3 +221,183 @@ export async function getReactions(code,afterId){
   const {data}=await sb.from('ad_reactions').select('id,emoji').eq('code',code).gt('id',afterId).order('id');
   return data||[];
 }
+
+/* ---------- correspondence duels (long-form, cross-device) ---------- */
+
+export async function findHandle(handle){
+  if(!SRV.ok)return null;
+  const {data}=await sb.from('ad_profiles').select('uid,handle,elo').eq('handle',handle).maybeSingle();
+  return data||null;
+}
+export async function corrCreate(guestUid,theme){
+  if(!SRV.ok||!SRV.me)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_corr_create',{p_guest:guestUid,p_theme:theme||'island'});
+  if(error)return {ok:false,why:error.message};
+  return {ok:true,id:data};
+}
+export async function corrJoin(id){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_corr_join',{p_game:id});
+  return error?{ok:false,why:error.message}:{ok:true,status:data};
+}
+export async function corrDecline(id){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_corr_decline',{p_game:id});
+  return error?{ok:false,why:error.message}:{ok:true,status:data};
+}
+export async function corrResign(id){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_corr_resign',{p_game:id});
+  return error?{ok:false,why:error.message}:{ok:true,status:data};
+}
+export async function corrPost(id,move,end){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_corr_post',{p_game:id,p_move:move,p_end:end||null});
+  return error?{ok:false,why:error.message}:{ok:true,status:data};
+}
+export async function corrList(){
+  if(!SRV.ok)return {ok:false,why:'backend offline',games:[]};
+  const {data,error}=await sb.rpc('ad_corr_list');
+  return error?{ok:false,why:error.message,games:[]}:{ok:true,games:data||[]};
+}
+export async function corrGame(id){
+  if(!SRV.ok)return null;
+  const {data,error}=await sb.rpc('ad_corr_game',{p_game:id});
+  return error?null:data;
+}
+
+/* ---------- rivals / follow graph ---------- */
+
+export async function follow(uid){
+  if(!SRV.ok||!SRV.me)return {ok:false,why:'backend offline'};
+  const {error}=await sb.rpc('ad_follow',{p_uid:uid});
+  return error?{ok:false,why:error.message}:{ok:true};
+}
+export async function unfollow(uid){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {error}=await sb.rpc('ad_unfollow',{p_uid:uid});
+  return error?{ok:false,why:error.message}:{ok:true};
+}
+export async function isFollowing(uid){
+  if(!SRV.ok)return false;
+  const {data}=await sb.rpc('ad_is_following',{p_uid:uid});
+  return !!data;
+}
+export async function rivals(){
+  if(!SRV.ok)return {ok:false,why:'backend offline',rivals:[]};
+  const {data,error}=await sb.rpc('ad_rivals');
+  return error?{ok:false,why:error.message,rivals:[]}:{ok:true,rivals:data||[]};
+}
+
+/* ---------- niche leaderboards ---------- */
+
+export async function corrStandings(){
+  if(!SRV.ok)return [];
+  const {data,error}=await sb.rpc('ad_corr_standings',{p_limit:50});
+  return error?[]:(data||[]);
+}
+export async function corrQuickest(){
+  if(!SRV.ok)return [];
+  const {data,error}=await sb.rpc('ad_corr_quickest',{p_limit:25});
+  return error?[]:(data||[]);
+}
+export async function corrLongest(){
+  if(!SRV.ok)return [];
+  const {data,error}=await sb.rpc('ad_corr_longest',{p_limit:25});
+  return error?[]:(data||[]);
+}
+export async function ladderWinrate(){
+  if(!SRV.ok)return [];
+  const {data,error}=await sb.rpc('ad_ladder_winrate',{p_min:3,p_limit:50});
+  return error?[]:(data||[]);
+}
+
+/* ---------- web push subscriptions ---------- */
+
+export async function pushRegister(sub){
+  if(!SRV.ok||!SRV.me)return {ok:false,why:'backend offline'};
+  const keys=(sub&&sub.keys)||{};
+  const {error}=await sb.rpc('ad_push_register',{
+    p_endpoint:sub.endpoint,p_p256dh:keys.p256dh,p_auth:keys.auth,
+    p_user_agent:(typeof navigator!=='undefined'?navigator.userAgent:null)});
+  return error?{ok:false,why:error.message}:{ok:true};
+}
+export async function pushUnregister(endpoint){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {error}=await sb.rpc('ad_push_unregister',{p_endpoint:endpoint});
+  return error?{ok:false,why:error.message}:{ok:true};
+}
+
+/* ---------- server-authoritative staking + two-party-verified duel escrow ---------- */
+
+export async function stakeBalance(){
+  if(!SRV.ok||!SRV.me)return null;
+  const {data,error}=await sb.rpc('ad_stake_balance');
+  return error?null:data;
+}
+export async function stakeClaimDaily(){
+  if(!SRV.ok||!SRV.me)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_stake_claim_daily');
+  return error?{ok:false,why:error.message}:{ok:true,balance:data};
+}
+export async function duelOpen(opponentUid,seed,stake){
+  if(!SRV.ok||!SRV.me)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_duel_open',{p_opponent:opponentUid,p_seed:seed,p_stake:stake});
+  return error?{ok:false,why:error.message}:{ok:true,id:data};
+}
+export async function duelAccept(id){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_duel_accept',{p_duel:id});
+  return error?{ok:false,why:error.message}:{ok:true,status:data};
+}
+export async function duelDecline(id){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_duel_decline',{p_duel:id});
+  return error?{ok:false,why:error.message}:{ok:true,status:data};
+}
+export async function duelAttest(id,outcome){
+  if(!SRV.ok)return {ok:false,why:'backend offline'};
+  const {data,error}=await sb.rpc('ad_duel_attest',{p_duel:id,p_outcome:outcome});
+  return error?{ok:false,why:error.message}:{ok:true,status:data};
+}
+
+/* ---------- spectator betting on ranked duels (pari-mutuel) ---------- */
+
+export async function duelsOpen(){
+  if(!SRV.ok)return [];
+  const {data,error}=await sb.rpc('ad_duels_open',{p_limit:50});
+  return error?[]:(data||[]);
+}
+export async function betPools(id){
+  if(!SRV.ok||!SRV.me)return null;
+  const {data,error}=await sb.rpc('ad_bet_pools',{p_duel:id});
+  return error?null:(data&&data[0])||null;
+}
+export async function betMine(){
+  if(!SRV.ok||!SRV.me)return [];
+  const {data,error}=await sb.rpc('ad_bet_mine');
+  return error?[]:(data||[]);
+}
+export async function betPlace(id,pick,stake){
+  if(!SRV.ok||!SRV.me)return {ok:false,why:'backend offline'};
+  const {error}=await sb.rpc('ad_bet_place',{p_duel:id,p_pick:pick,p_stake:stake});
+  return error?{ok:false,why:error.message}:{ok:true};
+}
+
+/* ---------- live spectator presence ---------- */
+
+export async function watchHeartbeat(code,sid,name,look){
+  if(!SRV.ok)return {ok:false};
+  const {error}=await sb.rpc('ad_watch_heartbeat',{p_code:code,p_sid:sid,p_name:name,p_look:look||{}});
+  return error?{ok:false,why:error.message}:{ok:true};
+}
+export async function watchRoster(code,sid){
+  if(!SRV.ok)return [];
+  const {data,error}=await sb.rpc('ad_watch_roster',{p_code:code,p_sid:sid||null});
+  return error?[]:(data||[]);
+}
+export async function watchLeave(code,sid){
+  if(!SRV.ok)return {ok:false};
+  const {error}=await sb.rpc('ad_watch_leave',{p_code:code,p_sid:sid});
+  return error?{ok:false}:{ok:true};
+}

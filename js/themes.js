@@ -13,7 +13,7 @@ export const THEMES={
     cloud:[0xb8a6d6,.26], star:[0xc2c8de,.85], moon:0xe8dcc0,
     fx:{mode:'drift',speed:.5,color:0xd8b878,count:110,size:.2,opacity:.8}},
 
-  emberfall:{name:'Emberfall Caldera',
+  emberfall:{name:'Emberfall Caldera',form:'crater',
     sky:['#150503','#c2451a','#571707','#0d0302'], fog:0x280b04, fogD:.02,
     hemi:[0xb86a3e,0x1a0703,.5], sun:[0xe8a068,1.15], rim:[0xc4481e,.6], board:[0xf0c99a,2.4],
     rock:0x302624, grass:0x40312a, plat:0x362e30, frame:0x60432a,
@@ -23,7 +23,7 @@ export const THEMES={
     cloud:[0xc07a4e,.16], star:[0xd8a888,.2], moon:0xd88a58,
     fx:{mode:'rise',speed:1.0,color:0xe07a34,count:95,size:.19,opacity:.85}},
 
-  frostspire:{name:'Frostspire Basin',
+  frostspire:{name:'Frostspire Basin',form:'mesa',
     sky:['#101c28','#c8dce8','#5f86a4','#0a111c'], fog:0x9db4c6, fogD:.018,
     hemi:[0xc0d4e2,0x223240,.7], sun:[0xf2f6fa,1.5], rim:[0x94b4cc,.38], board:[0xeef4f8,2.0],
     rock:0x8794a2, grass:0xd4dee4, plat:0xa0acba, frame:0x74828e,
@@ -33,7 +33,7 @@ export const THEMES={
     cloud:[0xeef2f6,.34], star:[0xd8e4ee,.14], moon:0xdce8f4,
     fx:{mode:'fall',speed:1.4,color:0xf4f8fb,count:150,size:.17,opacity:.9}},
 
-  verdance:{name:'Verdance Meadow',
+  verdance:{name:'Verdance Meadow',form:'plain',
     sky:['#14240f','#cadfae','#6ea8cc','#182c34'], fog:0xb8cfba, fogD:.01,
     hemi:[0xa8cce8,0x38512a,.8], sun:[0xf4e8c2,1.7], rim:[0x8eb8cc,.32], board:[0xf8eed4,1.8],
     rock:0x6a6654, grass:0x4b7340, plat:0x706b58, frame:0x74643f,
@@ -43,7 +43,7 @@ export const THEMES={
     cloud:[0xf4f6ee,.4], star:[0xffffff,.04], moon:0xf0ead0,
     fx:{mode:'fall',speed:.9,color:0xf0c8d4,count:60,size:.2,opacity:.85}},
 
-  umbra:{name:'Umbra Vigil',
+  umbra:{name:'Umbra Vigil',form:'plain',
     sky:['#020306','#0e1424','#070b16','#010203'], fog:0x060910, fogD:.02,
     hemi:[0x505e7a,0x0a0d14,.42], sun:[0xa8b2c2,.8], rim:[0x36435c,.28], board:[0xc2c8d4,1.6],
     rock:0x1b212a, grass:0x202d36, plat:0x232934, frame:0x3e3e48,
@@ -53,7 +53,7 @@ export const THEMES={
     cloud:[0x232c3c,.18], star:[0xd4dcec,1], moon:0xccd4e2,
     fx:null},
 
-  amberwaste:{name:'Amber Waste',
+  amberwaste:{name:'Amber Waste',form:'mesa',
     sky:['#2e1c0e','#d8ac68','#8f5c24','#221508'], fog:0xb8945a, fogD:.02,
     hemi:[0xe8be8a,0x463018,.6], sun:[0xf0ce98,1.6], rim:[0xd89a58,.42], board:[0xf8ddb6,2.0],
     rock:0x8c6f48, grass:0xa0844c, plat:0x927650, frame:0x82643a,
@@ -63,7 +63,7 @@ export const THEMES={
     cloud:[0xd8b884,.24], star:[0xf0d0a4,.08], moon:0xf0cc96,
     fx:{mode:'drift',speed:.7,color:0xc8a878,count:130,size:.15,opacity:.4}},
 
-  'coral-deep':{name:'Coral Deep',
+  'coral-deep':{name:'Coral Deep',form:'reef',
     sky:['#02141a','#0e6068','#094450','#011018'], fog:0x093e48, fogD:.025,
     hemi:[0x6ec0aa,0x08262c,.6], sun:[0x7cc8ae,1.05], rim:[0x247e8c,.48], board:[0xc8e4dc,1.8],
     rock:0x38565a, grass:0x2c6456, plat:0x345660, frame:0x447068,
@@ -94,7 +94,7 @@ export const THEMES={
     cloud:[0xe8c4d4,.32], star:[0xf4d4e0,.16], moon:0xf4ccd8,
     fx:{mode:'fall',speed:1.0,color:0xf4b8cc,count:85,size:.22,opacity:.85}},
 
-  voidgarden:{name:'Void Garden',
+  voidgarden:{name:'Void Garden',form:'orbit',
     sky:['#000003','#241040','#0c051c','#000002'], fog:0x05030c, fogD:.008,
     hemi:[0x7a5ec0,0x0a0616,.48], sun:[0xb8a0e8,1.05], rim:[0x5c38b0,.5], board:[0xccc0e4,1.8],
     rock:0x1d1a2e, grass:0x282240, plat:0x242040, frame:0x463a64,
@@ -104,7 +104,7 @@ export const THEMES={
     cloud:[0x352a54,.18], star:[0xccc0f4,1], moon:0xbfa8ee,
     fx:{mode:'drift',speed:.35,color:0xa890e0,count:90,size:.14,opacity:.6}},
 
-  foundry:{name:'Copper Foundry',
+  foundry:{name:'Copper Foundry',form:'hall',
     sky:['#140a04','#7a5024','#3e2814','#0e0703'], fog:0x2c1d10, fogD:.02,
     hemi:[0xc89a62,0x1e120a,.5], sun:[0xe8b47e,1.2], rim:[0xc8702e,.52], board:[0xf0ccA0,2.2],
     rock:0x56422f, grass:0x483e34, plat:0x584636, frame:0x7e5428,
@@ -134,7 +134,7 @@ export const THEMES={
     cloud:[0x441820,.28], star:[0xe8b4b8,.4], moon:0xe04a58,
     fx:{mode:'fall',speed:.8,color:0x7e767e,count:100,size:.15,opacity:.5}},
 
-  hollow:{name:'Lumen Hollow',
+  hollow:{name:'Lumen Hollow',form:'cavern',
     sky:['#010e08','#14402e','#082418','#010805'], fog:0x092016, fogD:.02,
     hemi:[0x4eae78,0x04140c,.55], sun:[0x5fc48a,.9], rim:[0x36cc8e,.42], board:[0xc4e6d0,1.8],
     rock:0x1c2e26, grass:0x1c4430, plat:0x223c2c, frame:0x365438,
@@ -144,7 +144,7 @@ export const THEMES={
     cloud:[0x26503c,.2], star:[0xade4c4,.42], moon:0xa0e8c0,
     fx:{mode:'drift',speed:.5,color:0x7ae8b0,count:150,size:.19,opacity:.8}},
 
-  saltflats:{name:'The Salt Flats',
+  saltflats:{name:'The Salt Flats',form:'plain',
     sky:['#a8aeb8','#eef0f2','#ccd2d8','#b4bac2'], fog:0xe2e6ea, fogD:.01,
     hemi:[0xf4f6f8,0xb0b4ba,.9], sun:[0xffffff,1.75], rim:[0xd0d6dc,.28], board:[0xffffff,1.6],
     rock:0xcccac4, grass:0xe2e0da, plat:0xd4d2cc, frame:0xb4b0a8,
@@ -154,7 +154,7 @@ export const THEMES={
     cloud:[0xffffff,.5], star:[0xffffff,0], moon:0xeef2f6,
     fx:null},
 
-  shardring:{name:'Ring of Shards',env:'shards',
+  shardring:{name:'Ring of Shards',form:'orbit',env:'shards',
     sky:['#0a0716','#6a4a9c','#2c1e4e','#080518'], fog:0x171030, fogD:.013,
     hemi:[0x9a86d6,0x201838,.62], sun:[0xd8c8f2,1.35], rim:[0x8a5ac0,.55], board:[0xf0e4ff,2.1],
     rock:0x3c3258, grass:0x3a4a62, plat:0x443a60, frame:0x7a6498,
@@ -195,6 +195,68 @@ export const THEMES={
     fx:{mode:'rain',speed:14,color:0x8aa4e0,count:240,size:.12,opacity:.4},
     lightning:true},
 };
+
+/* ---- world builder: fill every field applyTheme() reads from a compact spec ---- */
+function mk(o){
+  const rock=o.rock;
+  return {
+    name:o.name,form:o.form,env:o.env,
+    sky:o.sky,fog:o.fog,fogD:o.fogD!=null?o.fogD:.016,
+    hemi:o.hemi||[o.sky[2],0x0a0a14,.6],
+    sun:o.sun||[0xffffff,1.3],
+    rim:o.rim||[o.sky[1],.42],
+    board:o.board||[0xfff2d8,2],
+    rock,grass:o.grass!=null?o.grass:rock,plat:o.plat!=null?o.plat:rock,frame:o.frame!=null?o.frame:rock,
+    tileL:o.tileL,tileD:o.tileD,ring:o.ring,
+    grid:o.grid,border:o.border,
+    crystals:o.crystals||[o.ring,o.ring],
+    water:o.water!=null?o.water:o.ring,leaf:o.leaf!=null?o.leaf:rock,
+    mush:o.mush!=null?o.mush:0,
+    cloud:o.cloud||[o.sky[1],.16],star:o.star||[0xffffff,.5],moon:o.moon!=null?o.moon:0xffffff,
+    fx:o.fx!==undefined?o.fx:null,
+    ...(o.lightning?{lightning:true}:{}),
+  };
+}
+const dr=(color,count,size,opacity,speed)=>({mode:'drift',speed:speed||.5,color,count,size,opacity:opacity||.8});
+const rs=(color,count,size,opacity,speed)=>({mode:'rise',speed:speed||.8,color,count,size,opacity:opacity||.85});
+const fl=(color,count,size,opacity,speed)=>({mode:'fall',speed:speed||1,color,count,size,opacity:opacity||.9});
+const rn=(color,count,opacity,speed)=>({mode:'rain',speed:speed||12,color,count,size:.12,opacity:opacity||.42});
+
+Object.assign(THEMES,{
+  cloudloom:mk({name:'Cloudloom Terrace',form:'island',sky:['#2a2740','#cfd0e8','#8fa8cc','#4a4a6a'],fog:0xcfd6e4,fogD:.012,rock:0xb9c0d4,plat:0xdfe4ef,tileL:0xf4f6fb,tileD:0x8fa0c0,ring:0xa8c8f0,grid:'rgba(150,190,240,.4)',border:'rgba(255,255,255,.6)',cloud:[0xffffff,.6],star:[0xffffff,.05],fx:dr(0xdfe8f6,90,.3,.7,.4)}),
+  kitegrave:mk({name:'Kite Graveyard',form:'island',sky:['#1a1420','#e0a86a','#6a4a68','#120c14'],fog:0x3a2a34,fogD:.014,rock:0x5a4a52,plat:0x6a5660,tileL:0xe6d2b0,tileD:0x3a2e38,ring:0xe08a4a,grid:'rgba(230,160,90,.4)',border:'rgba(240,220,180,.6)',fx:fl(0xe8cfa8,70,.24,.8,.7)}),
+  windspire:mk({name:'Windspire Chimes',form:'orbit',sky:['#0a1220','#7ab0d8','#2a4a72','#060a14'],fog:0x1a2a44,fogD:.012,rock:0x3a4a64,plat:0x4a5c78,tileL:0xd8e6f4,tileD:0x2a3a54,ring:0x8ad0f0,grid:'rgba(140,210,250,.45)',border:'rgba(220,240,255,.6)',star:[0xdff0ff,.9],fx:dr(0xbfe0f8,80,.16,.7,.5)}),
+  balconend:mk({name:'The Balcony End',form:'plain',sky:['#3a3550','#e8c08a','#6a5a86','#24203a'],fog:0xb9b0c8,fogD:.03,rock:0x6a6276,plat:0x8a8298,tileL:0xefe4cc,tileD:0x4a4458,ring:0xd8a86a,grid:'rgba(220,180,120,.38)',border:'rgba(240,230,210,.55)',cloud:[0xffffff,.4],fx:null}),
+  roothollow:mk({name:'Roothollow',form:'cavern',sky:['#0a0f08','#2a3a22','#14200f','#060a04'],fog:0x14200f,fogD:.02,rock:0x2a2418,plat:0x3a3020,tileL:0xcab488,tileD:0x2a2416,ring:0x9ad06a,grid:'rgba(150,210,110,.4)',border:'rgba(220,200,140,.55)',leaf:0x3a5a28,mush:0x9ad06a,fx:dr(0x9ad06a,110,.16,.6,.4)}),
+  fungalkelp:mk({name:'Fungal Kelpwood',form:'cavern',sky:['#04121a','#0e4a5a','#062430','#020a12'],fog:0x08303a,fogD:.022,rock:0x1a3a44,plat:0x224a52,tileL:0xbfe0d8,tileD:0x0e3038,ring:0x5fe0c8,grid:'rgba(90,220,200,.42)',border:'rgba(180,240,220,.55)',leaf:0x2a6a5a,mush:0x6ae0d0,fx:rs(0x7ae8d8,150,.18,.7,.4)}),
+  tidetable:mk({name:'The Tide Table',form:'plain',sky:['#2a3a44','#a8c8d4','#5a7a8a','#1a2a34'],fog:0x8ab0bc,fogD:.02,rock:0x6a7a72,plat:0x9ab0a8,tileL:0xe4eee4,tileD:0x3a5560,ring:0x6ad0c8,grid:'rgba(120,220,206,.4)',border:'rgba(220,240,225,.6)',fx:rn(0x9fc4d0,120,.36,7)}),
+  abysslantern:mk({name:'Abyss Lantern',form:'cavern',sky:['#01060a','#04141c','#020a12','#000205'],fog:0x030c14,fogD:.026,rock:0x0e2028,plat:0x123038,tileL:0x8ab8b0,tileD:0x061820,ring:0x3ad0e0,grid:'rgba(60,200,224,.4)',border:'rgba(120,220,240,.5)',star:[0x9fd0e0,.15],fx:rs(0x8fe8f0,110,.16,.6,.35)}),
+  thermalvent:mk({name:'Thermal Vent',form:'crater',sky:['#120a14','#8a4a3a','#3a2030','#0a060c'],fog:0x2a141c,fogD:.02,rock:0x3a2820,plat:0x463028,tileL:0xc0a084,tileD:0x2a1c18,ring:0xe07a3a,grid:'rgba(226,120,60,.42)',border:'rgba(240,180,110,.6)',fx:rs(0xa8dce8,140,.2,.7,.6)}),
+  theanvil:mk({name:'The Anvil',form:'hall',sky:['#140a04','#a05a24','#4a2a14','#0c0603'],fog:0x2c1a10,fogD:.018,rock:0x3a3630,plat:0x2e2a26,tileL:0xcaa06a,tileD:0x241c18,ring:0xf08a34,grid:'rgba(240,140,60,.42)',border:'rgba(255,200,120,.6)',fx:rs(0xf0b04a,120,.18,.85,.7)}),
+  cinderchoir:mk({name:'Cinder Choir',form:'mesa',sky:['#160606','#b8482a','#4a1a14','#0c0303'],fog:0x2a0e0a,fogD:.02,rock:0x38221e,plat:0x402822,tileL:0xc08a68,tileD:0x241414,ring:0xe85a2a,grid:'rgba(232,90,42,.4)',border:'rgba(240,150,90,.6)',fx:rs(0xe07a34,130,.19,.8,1.1)}),
+  obsidianmirror:mk({name:'Obsidian Mirrorglass',form:'plain',sky:['#050508','#20202c','#0c0c14','#020204'],fog:0x0a0a12,fogD:.014,rock:0x14141c,plat:0x0e0e16,tileL:0x2a2a38,tileD:0x08080e,ring:0x8a9ad8,grid:'rgba(140,160,240,.4)',border:'rgba(200,210,255,.5)',plat:0x0a0a12,star:[0xdfe4ff,.8],fx:dr(0x9aa4e0,60,.14,.5,.3)}),
+  frozenbell:mk({name:'The Frozen Bell',form:'island',sky:['#1a2836','#d0e4ee','#6a8aa8','#0e1a26'],fog:0xbcd0dc,fogD:.018,rock:0x93a4b4,plat:0xc0d0dc,tileL:0xeef6fa,tileD:0x3a5570,ring:0x8ad0ec,grid:'rgba(150,210,240,.45)',border:'rgba(240,250,255,.66)',star:[0xe4f0fa,.2],fx:fl(0xf2f8fc,150,.17,.9,1.3)}),
+  borealvault:mk({name:'Boreal Vault',form:'orbit',sky:['#04101a','#2a7a6a','#0e3a4a','#02080f'],fog:0x0e3040,fogD:.014,rock:0x1a3a44,plat:0x10202a,tileL:0x9ae0c8,tileD:0x08201c,ring:0x5ae0a8,grid:'rgba(90,224,168,.45)',border:'rgba(150,240,200,.6)',cloud:[0x3ae0a0,.14],star:[0xcfeee0,1],fx:dr(0x6ae0b8,120,.16,.7,.4)}),
+  longwinter:mk({name:'Longwinter Wreck',form:'island',sky:['#1c2630','#a8bcc8','#5a6e80','#121a22'],fog:0x8aa0b0,fogD:.02,rock:0x5a6068,plat:0x6e767e,tileL:0xd4dce2,tileD:0x333d46,ring:0x9ab8cc,grid:'rgba(160,190,210,.4)',border:'rgba(210,225,235,.55)',fx:fl(0xeaf2f8,140,.18,.85,1.5)}),
+  glacierthroat:mk({name:'Glacier Throat',form:'cavern',sky:['#0a1a24','#3a6a86','#1a3a52','#050e16'],fog:0x2a4a5e,fogD:.02,rock:0x2a4454,plat:0x1a3444,tileL:0xc4e0ec,tileD:0x14303e,ring:0x6abce8,grid:'rgba(110,190,232,.45)',border:'rgba(200,232,250,.6)',star:[0xcfe4f0,.3],fx:fl(0xe8f4fc,150,.16,.9,1.6)}),
+  eventhorizon:mk({name:'Event Horizon',form:'orbit',sky:['#01010a','#1a0a3a','#0a0420','#000004'],fog:0x060314,fogD:.016,rock:0x1a1230,plat:0x241848,tileL:0x9a86d8,tileD:0x0e0820,ring:0xb06ae8,grid:'rgba(180,110,232,.45)',border:'rgba(120,220,240,.55)',star:[0xd8c8f4,1],fx:rn(0x8a6ae0,180,.4,14)}),
+  derelict:mk({name:'Derelict',form:'orbit',sky:['#080a10','#2a2f3a','#12151c','#04050a'],fog:0x0c1016,fogD:.02,rock:0x2a2f36,plat:0x22262c,tileL:0x9aa2ac,tileD:0x14181e,ring:0x6a8ab0,grid:'rgba(120,150,190,.4)',border:'rgba(180,190,210,.5)',star:[0xc4ccdc,.9],fx:dr(0x8a94a4,70,.16,.5,.3)}),
+  colosseum:mk({name:'Sunken Colosseum',form:'hall',sky:['#2a2418','#c8a86a','#6a5a34','#181208'],fog:0x9a8456,fogD:.016,rock:0x8a7a5a,plat:0xb09a6e,tileL:0xe4d4a8,tileD:0x5a4a34,ring:0xcaa05a,grid:'rgba(230,200,140,.4)',border:'rgba(240,220,170,.6)',fx:dr(0xc8b488,90,.2,.5,.4)}),
+  grandstair:mk({name:'The Grand Stair',form:'mesa',sky:['#1a1024','#9a5aa0','#3a2050','#0e0818'],fog:0x2a1830,fogD:.018,rock:0x4a3456,plat:0x5a4066,tileL:0xd8c0e0,tileD:0x2a1c3a,ring:0xc46ae0,grid:'rgba(200,120,230,.42)',border:'rgba(230,200,250,.55)',fx:dr(0xc8a4f0,100,.16,.6,.4)}),
+  tessellate:mk({name:'Parlour of Tessellations',form:'hall',sky:['#e8e8ec','#ffffff','#c8ccd4','#d0d4dc'],fog:0xe6e8ee,fogD:.01,rock:0xd8d8de,plat:0xeceef2,tileL:0xffffff,tileD:0x2a2c34,ring:0x5a6a86,grid:'rgba(60,70,90,.3)',border:'rgba(40,44,54,.55)',star:[0xffffff,0],fx:null}),
+  inkgold:mk({name:'Ink & Gold',form:'plain',sky:['#02030a','#0a0e1c','#04060f','#010105'],fog:0x04060e,fogD:.018,rock:0x0c0f1a,plat:0x080a12,tileL:0xe8c86a,tileD:0x0a0d16,ring:0xf0c14e,grid:'rgba(240,200,90,.45)',border:'rgba(255,225,120,.6)',star:[0xf0dca0,.6],fx:dr(0xf0c86a,70,.16,.7,.35)}),
+  gridprime:mk({name:'The Grid Prime',form:'orbit',sky:['#02020a','#0a0a24','#05051a','#010108'],fog:0x06061e,fogD:.02,rock:0x101034,plat:0x0a0a28,tileL:0x22e0d0,tileD:0x0a0a20,ring:0x22f0ff,grid:'rgba(40,240,255,.5)',border:'rgba(255,40,160,.6)',crystals:[0x22f0ff,0xff2a9a],star:[0x8ae0ff,.5],fx:rn(0x22e0ff,160,.45,13)}),
+  negspace:mk({name:'Negative Space',form:'plain',sky:['#ffffff','#ffffff','#f4f6f8','#eef0f2'],fog:0xffffff,fogD:.012,rock:0xf0f0f2,plat:0xf8f8fa,tileL:0xffffff,tileD:0xd2d6dc,ring:0xb8b0c8,grid:'rgba(180,180,200,.3)',border:'rgba(210,200,230,.5)',star:[0xffffff,0],fx:null}),
+  ossuary:mk({name:'Ossuary Court',form:'hall',sky:['#0a0808','#3a2e28','#1a1210','#060404'],fog:0x141008,fogD:.02,rock:0x2a2018,plat:0x3a2c22,tileL:0xd8ccb2,tileD:0x241a12,ring:0xc8a878,grid:'rgba(200,168,120,.38)',border:'rgba(220,200,160,.5)',mush:0xc8b088,fx:dr(0xcbb48a,80,.18,.5,.4)}),
+  underriver:mk({name:'The Under-River',form:'cavern',sky:['#04080c','#0e2030','#06121c','#020508'],fog:0x081822,fogD:.022,rock:0x14242e,plat:0x1a2e38,tileL:0x9ac0cc,tileD:0x0a1a24,ring:0x4aa8c8,grid:'rgba(80,180,210,.4)',border:'rgba(150,220,240,.5)',star:[0x9fd0e0,.2],fx:dr(0x6ab8d0,90,.16,.5,.35)}),
+  candlecrypt:mk({name:'Candle Crypt',form:'cavern',sky:['#0a0503','#3a1e0e','#1a0c06','#050202'],fog:0x1a0c06,fogD:.022,rock:0x2a1a12,plat:0x32201a,tileL:0xd0b488,tileD:0x201410,ring:0xe09a3a,grid:'rgba(224,154,58,.4)',border:'rgba(240,200,120,.55)',fx:rs(0xf0a840,140,.2,.85,.5)}),
+  hourglassroom:mk({name:'The Hourglass Room',form:'island',sky:['#241a0c','#d8b06a','#6a4e28','#140d06'],fog:0x9a7840,fogD:.016,rock:0x7a5e38,plat:0xa08050,tileL:0xf0dcae,tileD:0x5a4428,ring:0xe0b054,grid:'rgba(230,190,120,.42)',border:'rgba(245,220,160,.6)',fx:fl(0xe8c88a,150,.2,.9,1.4)}),
+  mirrorstorm:mk({name:'Mirror Maelstrom',form:'orbit',sky:['#0a0e18','#3a4a7a','#1a2444','#05070f'],fog:0x141c30,fogD:.02,rock:0x2a3450,plat:0x22304a,tileL:0xa8c0e8,tileD:0x141c34,ring:0x7a9af0,grid:'rgba(130,170,255,.45)',border:'rgba(200,214,255,.65)',fx:rn(0x9ab4e8,200,.42,14),lightning:true}),
+  clockgarden:mk({name:'The Clockwork Garden',form:'hall',sky:['#140e06','#8a6a34','#3a2a14','#0c0803'],fog:0x2c2010,fogD:.018,rock:0x5a4626,plat:0x6e5630,tileL:0xd8b878,tileD:0x2a2014,ring:0xd8a23a,grid:'rgba(220,170,80,.42)',border:'rgba(240,210,140,.6)',leaf:0x8a6a2a,fx:dr(0xc8a86a,80,.18,.5,.4)}),
+  tidepool:mk({name:'Tidepool Terraces',form:'reef',sky:['#0a1a1e','#3a8a8a','#1a4a52','#041014'],fog:0x1a4a52,fogD:.02,rock:0x2a5a58,plat:0x3a6a64,tileL:0xd8e8d0,tileD:0x1a4048,ring:0x5ad0b8,grid:'rgba(90,210,180,.42)',border:'rgba(220,140,170,.6)',leaf:0x2e6a5a,fx:rs(0x9fe0d0,110,.16,.55,.4)}),
+  amberdune:mk({name:'Amber Dune Sea',form:'mesa',sky:['#3a2410','#e8b878','#8a5a28','#241408'],fog:0xc8a05a,fogD:.02,rock:0x9a7a4a,plat:0xb08a52,tileL:0xe8cc96,tileD:0x6a4a2a,ring:0xd89a52,grid:'rgba(240,206,144,.4)',border:'rgba(230,160,84,.62)',fx:dr(0xc8a878,120,.16,.4,.7)}),
+  stormkeep:mk({name:'Stormkeep Ramparts',form:'hall',sky:['#0a0f15','#38455a','#232c3a','#070a0f'],fog:0x1c2530,fogD:.022,rock:0x313942,plat:0x373f4a,tileL:0x868f9a,tileD:0x232a34,ring:0x7e9cc0,grid:'rgba(158,188,214,.4)',border:'rgba(204,214,224,.55)',fx:rn(0x94aec4,220,.42,12),lightning:true}),
+});
 
 export const THEME_IDS=Object.keys(THEMES);
 export const DEFAULT_THEME='duskhold';

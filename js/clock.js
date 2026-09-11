@@ -1,8 +1,10 @@
 export const CONTROLS={
   none:{name:'No Clock',base:0,inc:0},
+  bullet:{name:'Bullet 1+0',base:60,inc:0},
   blitz:{name:'Blitz 5+3',base:300,inc:3},
   rapid:{name:'Rapid 10+5',base:600,inc:5},
-  bullet:{name:'Bullet 1+0',base:60,inc:0},
+  classic:{name:'Classic 30+0',base:1800,inc:0},
+  correspondence:{name:'Correspondence (1/day)',base:0,inc:0,corr:true},
 };
 
 export class Clocks{

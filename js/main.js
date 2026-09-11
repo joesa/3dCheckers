@@ -1,19 +1,24 @@
 import * as GAME from './game.js';
 import {createWorld} from './world.js';
-import {makeAvatar,makeCrowd} from './actors.js';
+import {visibleSet} from './fog.js';
+import {makeAvatar,makeCrowd,makeNameTag} from './actors.js';
 import {chooseMove,LEVEL_NAMES,PERSONAS,taunt as aiTaunt,QK,qkReset} from './ai.js';
 import {TabsTransport,RTCRoom} from './net.js';
 import {THEMES,THEME_IDS,DEFAULT_THEME} from './themes.js';
 import {setSkin} from './pieces.js';
-import {sfx} from './audio.js';
+import {sfx,music} from './audio.js';
 import {Clocks,CONTROLS} from './clock.js';
 import {generatePuzzle,dayKey} from './puzzles.js';
 import {GAUNTLET_ROUNDS,rollDaily,gauntletState,saveGauntlet,roundReward,clearReward} from './gauntlet.js';
 import {buildCode,parseCode,openViewer} from './replay.js';
 import * as ECO from './economy.js';
-import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog} from './cosmetics.js';
+import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,AVATARS,SHAPES,PALETTES,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog,avatarLook,armyPalette} from './cosmetics.js';
 import {Auth,signUp as authSignUp,signIn as authSignIn,signOut as authSignOut,reportMatch as authReportMatch,ladder as authLadder,onAuthChange,onAssetsChange,flushAssets} from './auth.js';
-import {SRV,srvInit,srvReconnect} from './srv.js';
+import * as RET from './retention.js';
+import {SRV,srvInit,srvReconnect,corrCreate,corrJoin,corrDecline,corrResign,corrPost,corrList,corrGame,findHandle,follow,unfollow,rivals,corrStandings,corrQuickest,corrLongest,ladderWinrate,pushRegister,pushUnregister,duelOpen,duelAccept,duelAttest,stakeBalance,stakeClaimDaily,duelsOpen,betPools,betMine,betPlace,watchHeartbeat,watchRoster,watchLeave,createInvite,getInvite,pushMove,getMoves,getReactions,react as srvReact,newCode as srvNewCode} from './srv.js';
+import {corrState} from './corr.js';
+import {CONFIG} from './config.js';
+import {addTween} from './tween.js';
 
 const $=s=>document.querySelector(s);
 const show=(el,on)=>el.classList.toggle('hidden',!on);
@@ -21,7 +26,26 @@ const TEAM_NAME={red:'Ember',black:'Frost'};
 
 const ADJ=['Swift','Smoky','Crimson','Frosty','Rogue','Gilded','Misty','Thunder','Quiet','Lucky'];
 const NOUN=['Comet','Willow','Raven','Ember','Glacier','Nomad','Pixie','Heron','Vagabond','Star'];
-const MYNAME=ADJ[Math.random()*ADJ.length|0]+' '+NOUN[Math.random()*NOUN.length|0];
+let MYNAME=ADJ[Math.random()*ADJ.length|0]+' '+NOUN[Math.random()*NOUN.length|0];
+let MYHANDLE=null,OPPNAME=null;
+function myHandle(){
+  const p=currentProfile();
+  return (signedIn()&&p&&(p.handle||String((SRV.me&&SRV.me.id)||'').replace(/^local:/,'')))||null;
+}
+function refreshNames(){
+  const rn={red:TEAM_NAME.red,black:TEAM_NAME.black};
+  if(G.mode==='watch'&&G.watchNames){rn.red=G.watchNames.host||rn.red;rn.black=G.watchNames.guest||rn.black;}
+  else if(G.myColor){
+    rn[G.myColor]=MYHANDLE||TEAM_NAME[G.myColor];
+    const o=G.myColor===GAME.RED?'black':'red';
+    rn[o]=OPPNAME||TEAM_NAME[o];
+  }else if(G.mode==='ai'){rn.black='Storm';}
+  G.dispName=rn;
+  const short=s=>String(s).length>8?String(s).slice(0,7)+'…':String(s);
+  const rl=document.querySelector('.ember-l'),fl=document.querySelector('.frost-l');
+  if(rl)rl.textContent=short(rn.red);
+  if(fl)fl.textContent=short(rn.black);
+}
 
 function lsGet(k){try{return localStorage.getItem(k);}catch(e){return null;}}
 function lsSet(k,v){try{localStorage.setItem(k,v);}catch(e){}}
@@ -47,20 +71,25 @@ function throttledChat(text){
 let SEED=Math.random()*1e9|0;
 const rigs={red:null,black:null};
 const anchors={red:null,black:null};
+const seats={red:{facing:Math.PI,z:5.3,side:1},black:{facing:0,z:-5.3,side:-1}};
 let crowd=null;
+let opening=false;
 function buildActors(){
   for(const[team,facing,zpos]of[['red',Math.PI,5.3],['black',0,-5.3]]){
     if(anchors[team])world.removeObject(anchors[team]);
     const anchor=world.makeGroup(0,.05,zpos);
-    const a=makeAvatar(team,facing,(SEED+(team==='red'?1:2))>>>0,getEquip().throne);
+    const a=makeAvatar(team,facing,(SEED+(team==='red'?1:2))>>>0,getEquip().throne,avatarLook());
     anchor.add(a.group);
     anchors[team]=anchor;
-    rigs[team]={rig:a.rig,update:a.update};
+    rigs[team]={rig:a.rig,update:a.update,person:a.person,chair:a.chair,setStand:a.setStand,setWalk:a.setWalk,setHeading:a.setHeading};
+    a.person.position.set(0,0,0);
   }
   if(crowd)world.removeObject(crowd.group);
   crowd=makeCrowd(SEED);
   world.addObject(crowd.group);
 }
+world.reshape(getEquip().shape);
+world.army(armyPalette());
 buildActors();
 world.onFrame(dt=>{
   if(rigs.red)rigs.red.update(dt);
@@ -69,33 +98,51 @@ world.onFrame(dt=>{
 });
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 
+/* per-move turn clock: a fresh countdown armed on every move */
+const TURN_MS=30000, BLAZING_MS=15000;
+
 const G={
   mode:null, transport:null, myColor:null,
   state:null, moves:[], selected:null,
   busy:false, over:false, started:false,
-  peerSeen:false, turnEnd:null, lastTick:0,
+  peerSeen:false, turnEnd:null, lastTick:0, turnMoves:-1,
   rtcWasHost:false, aiLevel:'medium', aiTimer:0,
-  clock:null, clockId:'none', clockInited:false, turnLen:45000, blazing:false,
+  clock:null, clockId:'none', clockInited:false, turnLen:TURN_MS, blazing:false,
   record:[], gv:null, pz:null, persona:null, wagerN:0, nextAction:null,
+  duelId:null,
+  behind:false, deficit:0,
+  fog:false,
+  dispName:{red:'Ember',black:'Frost'}, watchNames:null,
 };
 const isOnline=()=>G.mode==='host'||G.mode==='guest';
 let roomTheme=DEFAULT_THEME;
 
 /* ================= rendering ================= */
 
+function applyFog(){
+  if(G.fog&&(G.mode==='ai'||G.mode==='hotseat')&&G.state){
+    const viewer=G.mode==='ai'?(G.myColor||GAME.RED):G.state.turn;
+    world.setFog(visibleSet(G.state.board,viewer),viewer);
+  }else world.setFog(null);
+}
+
 function renderBoard(stagger=false){
   world.syncBoard(G.state.board,stagger);
+  applyFog();
 }
 
 function updateHUD(){
   const t=G.state.turn;
+  applyFog();
   $('#turn-emblem').className=t;
   $('#turn-emblem').style.color=t==='red'?'var(--ember)':'var(--frost)';
-  let label=TEAM_NAME[t]+' to move';
+  let label=G.dispName[t]+' to move';
   if(G.mode==='ai')label+=t===GAME.BLACK?' — machine':' — you';
   else if(G.myColor)label+= (t===G.myColor?' — you':' — opponent');
   $('#turn-text').textContent=G.over?'Game over':label;
-  show($('#timer-wrap'),isOnline()&&!G.over);
+  updateMoveHud();
+  show($('#clocks'),!!(G.clock&&G.clock.on));
+  if(G.over){show($('#timer-wrap'),false);show($('#timer-secs'),false);}
   for(const color of['red','black']){
     const lost=12-GAME.countPieces(G.state.board,color);
     const el=$(color==='red'?'#cap-red':'#cap-black');
@@ -108,11 +155,33 @@ function updateHUD(){
   }
 }
 
+function updateMoveHud(){
+  const el=$('#move-count');
+  if(el&&G.state)el.textContent='Move '+(Math.floor(G.state.moveNo/2)+1);
+}
+function setTimerSecs(secs){
+  const el=$('#timer-secs');if(!el)return;
+  const active=!!G.turnEnd&&!G.over;
+  show(el,active);
+  if(!active)return;
+  const m=(secs/60)|0,s=secs%60;
+  el.textContent=m+':'+(s<10?'0':'')+s;
+  el.classList.toggle('low',secs<=10);
+}
+function localMoverOk(){
+  if(G.mode==='hotseat')return true;
+  if(G.mode==='guest')return false;
+  if(G.mode==='ai'||G.mode==='puzzle')return G.state.turn===GAME.RED;
+  if(G.mode==='host')return G.state.turn===G.myColor;
+  if(G.mode==='corr')return G.state.turn===G.myColor;
+  return false;
+}
+
 function logMove(move,color,promoted,moveNo){
   const li=document.createElement('li');
   li.className=color;
   const n=move.captures.length;
-  li.innerHTML=`<span class="n">${moveNo}.</span> <i>${TEAM_NAME[color]}</i> ${GAME.sqName(move.from)}→${GAME.sqName(move.path[move.path.length-1])}${n?' ×'+n:''}${promoted?' ♛':''}`;
+  li.innerHTML=`<span class="n">${moveNo}.</span> <i>${G.dispName[color]}</i> ${GAME.sqName(move.from)}→${GAME.sqName(move.path[move.path.length-1])}${n?' ×'+n:''}${promoted?' ♛':''}`;
   $('#log').appendChild(li);
   $('#log').scrollTop=1e9;
 }
@@ -177,6 +246,7 @@ async function playMove(move){
   await runAnimation(move,color);
   const nextState=GAME.applyMove(G.state,move);
   G.state=nextState;
+  if(G.myColor){let mine=0,opp=0;for(const row of nextState.board)for(const p of row){if(!p)continue;p.color===G.myColor?mine++:opp++;}if(mine<opp){G.behind=true;G.deficit=Math.max(G.deficit,opp-mine);}}
   refreshMoves();
   logMove(move,color,promoted,nextState.moveNo);
   world.showLastMove(move);
@@ -192,6 +262,10 @@ async function playMove(move){
   if(G.mode==='puzzle'){puzzleJudge(move);return;}
   if(G.watchCode&&isOnline())pushMove(G.watchCode,nextState.moveNo,color,move);
   if(G.mode!=='hotseat'&&isOnline())G.transport.send({t:'state',state:G.state});
+  if(G.mode==='corr'&&G.corrId){
+    const end=G.state.winner&&G.state.winner===G.myColor?'win':null;
+    corrPost(G.corrId,move,end).then(r=>{if(!r.ok)toast('Server unreachable — your move was not saved ('+(r.why||'')+')','bad');});
+  }
   renderBoard();
   updateHUD();
   G.busy=false;
@@ -244,7 +318,7 @@ function endGame(winnerColor,resigned){
   clearSelection();
   updateHUD();
   const me=G.myColor;
-  const winName=TEAM_NAME[winnerColor];
+  const winName=G.dispName[winnerColor];
   $('#result-emblem').style.color=winnerColor==='red'?'var(--ember)':'var(--frost)';
   let title,sub;
   if(!me){title=`${winName.toUpperCase()} TRIUMPHS`;sub='Pass the crown to the next duelist.';sfx.win();}
@@ -265,7 +339,14 @@ function endGame(winnerColor,resigned){
   else if(isOnline()||G.mode==='hotseat')ECO.addXp(15);
   if(G.mode==='ai'&&!G.gv&&G.persona)showTaunt(winnerColor===GAME.BLACK?G.persona.win:G.persona.loss);
   show($('#b-replay-code'),G.record.length>0&&G.mode!=='puzzle');
-  if(G.wagerN>0){
+  if(G.duelId){
+    duelAttest(G.duelId, winnerColor===me?'win':'loss').then(r=>{
+      if(!r||!r.ok)return;
+      if(r.status==='completed')toast(me&&winnerColor===me?'Stake won — escrow paid to you':'Stake lost to your opponent',me&&winnerColor===me?'good':'bad');
+      else if(r.status==='refunded')toast('Result disputed — stakes refunded','bad');
+      else if(r.status==='active')toast('Your result is attested — awaiting your opponent');
+    });
+  }else if(G.wagerN>0){
     const won=me&&winnerColor===me;
     ECO.settleWager(G.wagerN,won);
     toast(won?'Wager won: +'+(G.wagerN*2)+' coins':'Wager lost',won?'good':'bad');
@@ -274,6 +355,21 @@ function endGame(winnerColor,resigned){
   }
   if(G.qk)quantEnd(winnerColor);
   if(G.gv)gauntletEnd(winnerColor);
+  if(me){
+    let captured=0,bestChain=0;
+    for(const mv of G.record){if(mv.captures&&mv.captures.length){captured+=mv.captures.length;bestChain=Math.max(bestChain,mv.captures.length);}}
+    let crowns=0;for(const row of G.state.board)for(const p of row)if(p&&p.king&&p.color===me)crowns++;
+    const res={win:winnerColor===me,captured,bestChain,crowns,moves:G.state.moveNo||0,comeback:G.behind&&winnerColor===me,deficit:G.deficit};
+    const evs=[...RET.recordGame(res),...RET.questProgress(res),...RET.checkSets()];
+    for(const e of evs){
+      if(e.t==='firstwin')toast('First victory of the day! +'+e.coins+' coins','good');
+      else if(e.t==='jackpot')toast('COMEBACK JACKPOT! +'+e.coins+' coins — you turned it around!','good');
+      else if(e.t==='quest')toast('Quest complete: '+e.q.label+'  +'+e.q.coins+' coins +'+e.q.xp+' XP','good');
+      else if(e.t==='milestone')toast('Milestone — '+e.m.label+'! Signature item unlocked in the Marketplace','good');
+      else if(e.t==='set')toast('Collection complete: '+e.set.name+'! Crown-jewel unlocked','good');
+    }
+    if(evs.length)refreshWallet();
+  }
   if(isOnline()&&SRV.ok&&SRV.me&&SRV.oppUid&&G.myColor&&!G.gv&&G.state){
     const res=winnerColor===G.myColor?'win':'loss';
     const nonce=(SEED>>>0)*4096+(G.state.moveNo||0);
@@ -310,6 +406,7 @@ function resetMatch(){
   G.state=GAME.initialState();
   G.over=false;G.busy=false;
   G.record=[];
+  G.duelId=null;G._stakeWait=false;G.wagerN=0;
   G.clockInited=false;
   $('#log').innerHTML='';
   world.showLastMove(null);
@@ -358,6 +455,10 @@ world.onHover(sq=>{
 function onMessage(m){
   if(!m||!m.t)return;
   switch(m.t){
+    case 'who':
+      if(m.uid&&SRV.me&&m.uid!==SRV.me.id)SRV.oppUid=m.uid;
+      {const nm=m.handle||m.name;if(nm){OPPNAME=nm;refreshNames();}}
+      break;
     case 'hello':
       if(G.mode==='host'&&!G.peerSeen){
         G.peerSeen=true;
@@ -429,14 +530,24 @@ function onMessage(m){
       break;
     }
     case 'wager-ask':
-      if(G.wagerN>0){G.transport.send({t:'wager-no'});break;}
-      offerWager(m.n);
+      if(G.wagerN>0||G.duelId){G.transport.send({t:'wager-no'});break;}
+      offerWager(m.n,!!m.stake);
       break;
     case 'wager-ok':
-      confirmWager(m.n,'Opponent accepted the wager');
+      confirmWager(m.n,!!m.stake,'Opponent accepted the stake');
       break;
     case 'wager-no':
-      toast('Opponent declined the wager');
+      if(G._stakeWait)G._stakeWait=false;
+      if(G.wagerN===0&&!G.duelId)toast('Opponent declined the stake');
+      break;
+    case 'duel':
+      if(G._stakeWait&&!G.duelId){G._stakeWait=false;duelAccept(m.id).then(r=>{
+        if(r.ok&&r.status==='active'){G.duelId=m.id;toast('Stake held in escrow — play on','good');}
+        else{G.duelId=null;toast('Could not enter escrow ('+(r.why||r.status||'')+') — duel is unwaged','bad');G.transport.send({t:'duel-fail',id:m.id});}
+      });}
+      break;
+    case 'duel-fail':
+      G._stakeWait=false;G.duelId=null;toast('Opponent could not fund the stake — duel is unwaged','bad');
       break;
     case 'watchreq':
       if(G.mode==='host'&&!G.watchCode&&SRV.ok){
@@ -445,6 +556,7 @@ function onMessage(m){
       break;
     case 'watch':
       G.watchCode=m.code;
+      presStart(m.code,false);
       toast('Spectators have taken the stands','good');
       show($('#btn-watch'),false);
       break;
@@ -454,6 +566,150 @@ function onMessage(m){
   }
 }
 
+/* ============ arena opening: arrange throne -> walk to it -> take a seat ============ */
+const easeIO=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
+const WALK_FROM=-2.8,WALK_TO=-1.2;   // seat-local depth (behind the throne -> just behind the seat)
+const SEAT_RMIN=4.6,SEAT_RMAX=6.1,SEAT_BOARD=4.25; // placement ring + board clearance
+
+/* --- chair placement: drag your throne around the lawn before the duel --- */
+let placing=false,placeTeam=null,placeDrag=false;
+const pDown=e=>placePointer('down',e),pMove=e=>placePointer('move',e),pUp=e=>placePointer('up',e);
+
+function seatValid(x,z){
+  const r=Math.hypot(x,z);
+  if(r<SEAT_RMIN||r>SEAT_RMAX)return false;
+  if(Math.max(Math.abs(x),Math.abs(z))<SEAT_BOARD)return false;
+  return true;
+}
+function projectSeat(x,z){
+  const rawValid=seatValid(x,z);
+  let r=Math.hypot(x,z);
+  if(r<1e-3){x=0;z=r=1;}
+  const R=Math.max(SEAT_RMIN+.1,Math.min(SEAT_RMAX,r));
+  let px=x/r*R,pz=z/r*R;
+  const m=Math.max(Math.abs(px),Math.abs(pz));
+  if(m<SEAT_BOARD){const k=SEAT_BOARD/m;px*=k;pz*=k;const nr=Math.hypot(px,pz);if(nr>SEAT_RMAX){const k2=SEAT_RMAX/nr;px*=k2;pz*=k2;}}
+  return {x:px,z:pz,rawValid};
+}
+function setSeatPos(team,x,z){
+  const a=anchors[team];if(!a)return;
+  a.position.set(x,.05,z);
+  const r=rigs[team];if(r&&r.setHeading)r.setHeading(Math.atan2(-x,-z));
+}
+function moveSeatTo(cx,cy){
+  const p=world.groundAt(cx,cy);
+  if(!p)return;
+  const s=projectSeat(p.x,p.z);
+  setSeatPos(placeTeam,s.x,s.z);
+  world.showGhost(s.x,s.z,s.rawValid);
+}
+function placePointer(kind,e){
+  if(!placing)return;
+  if(kind==='down'){placeDrag=true;moveSeatTo(e.clientX,e.clientY);}
+  else if(kind==='move'&&placeDrag){moveSeatTo(e.clientX,e.clientY);}
+  else if(kind==='up'){placeDrag=false;}
+}
+function placementCamera(){
+  const cam=world.cam;if(!cam)return;
+  const {camera,controls}=cam;
+  controls.enabled=false;controls.autoRotate=false;
+  const c0=camera.position.clone(),t0=controls.target.clone();
+  const p1=[0,13.6,18.4],t1=[0,.4,0];
+  addTween(.7,p=>{const e=easeIO(p);
+    camera.position.set(c0.x+(p1[0]-c0.x)*e,c0.y+(p1[1]-c0.y)*e,c0.z+(p1[2]-c0.z)*e);
+    controls.target.set(t0.x+(t1[0]-t0.x)*e,t0.y+(t1[1]-t0.y)*e,t0.z+(t1[2]-t0.z)*e);
+  });
+}
+function beginPlace(){
+  const team=G.myColor||'red';
+  placeTeam=team;
+  const r=rigs[team];
+  if(!r||!world.groundAt){runWalkIn();return;}
+  placing=true;G.busy=true;
+  setSeatPos(team,0,seats[team].z);
+  r.person.visible=false;
+  world.showGhost(0,seats[team].z,true);
+  placementCamera();
+  const cv=$('#gl');
+  cv.addEventListener('pointerdown',pDown);
+  window.addEventListener('pointermove',pMove);
+  window.addEventListener('pointerup',pUp);
+  show($('#seat-place'),true);
+  $('#seat-place .sp-hint').textContent=G.mode==='hotseat'
+    ?'Drag the Ember throne onto the lawn'
+    :'Drag your throne onto the lawn';
+  $('#b-seat-done').onclick=()=>{sfx.click();endPlace();};
+}
+function endPlace(){
+  if(!placing)return;
+  placing=false;placeDrag=false;
+  const cv=$('#gl');
+  cv.removeEventListener('pointerdown',pDown);
+  window.removeEventListener('pointermove',pMove);
+  window.removeEventListener('pointerup',pUp);
+  world.hideGhost();
+  show($('#seat-place'),false);
+  const r=rigs[placeTeam];if(r)r.person.visible=true;
+  runWalkIn();
+}
+
+function seatWalkIn(team){
+  const r=rigs[team];
+  if(!r)return Promise.resolve();
+  const arc=.7*seats[team].side;
+  return new Promise(res=>{
+    r.person.position.set(0,0,WALK_FROM);
+    r.setStand(1);r.setWalk(1);
+    addTween(1.95,p=>{
+      const e=easeIO(p);
+      r.person.position.z=WALK_FROM+(WALK_TO-WALK_FROM)*e;
+      r.person.position.x=Math.sin(p*Math.PI)*arc;
+    },()=>{
+      r.setWalk(0);
+      addTween(.72,p=>{
+        const e=easeIO(p);
+        r.person.position.z=WALK_TO*(1-e);
+        r.setStand(1-e);
+      },()=>{
+        r.person.position.set(0,0,0);r.setStand(0);r.setWalk(0);
+        res();
+      });
+    });
+  });
+}
+
+function openingCamera(dur){
+  const cam=world.cam;
+  if(!cam)return;
+  const {camera,controls}=cam;
+  controls.enabled=false;controls.autoRotate=false;
+  const c0=camera.position.clone(),t0=controls.target.clone();
+  const p1=[0,9.7,14],t1=[0,0,0];
+  addTween(dur,p=>{
+    const e=easeIO(p);
+    camera.position.set(c0.x+(p1[0]-c0.x)*e,c0.y+(p1[1]-c0.y)*e,c0.z+(p1[2]-c0.z)*e);
+    controls.target.set(t0.x+(t1[0]-t0.x)*e,t0.y+(t1[1]-t0.y)*e,t0.z+(t1[2]-t0.z)*e);
+  },()=>{
+    camera.position.set(p1[0],p1[1],p1[2]);
+    controls.target.set(0,0,0);
+    controls.enabled=true;
+  });
+}
+
+function runWalkIn(){
+  if(opening)return;opening=true;
+  for(const t of['red','black']){const r=rigs[t];if(r){r.person.visible=true;r.setStand(0);r.setWalk(0);r.person.position.set(0,0,0);}}
+  openingCamera(2.7);
+  G.busy=true;
+  toast('The duelists take their seats','good');
+  Promise.all([seatWalkIn('red'),seatWalkIn('black')]).then(()=>{
+    show($('#emote-bar'),true);
+    G.busy=false;opening=false;
+    armTurn();updateHUD();
+    maybeAI();
+  });
+}
+
 function enterMatch(){
   G.started=true;
   show($('#menu'),false);
@@ -461,9 +717,9 @@ function enterMatch(){
   show($('#chat'),isOnline());
   show($('#result'),false);
   const hasClock=!!(G.clock&&G.clock.on);
-  show($('#timer-wrap'),isOnline()&&!hasClock);
+  show($('#timer-wrap'),false);
   show($('#clocks'),hasClock);
-  show($('#emote-bar'),true);
+  show($('#emote-bar'),false);
   show($('#wallet-chip'),true);
   show($('#btn-wager'),isOnline());
   show($('#btn-watch'),isOnline()&&SRV.ok&&!G.watchCode);
@@ -472,6 +728,9 @@ function enterMatch(){
   btn.textContent='Rematch';
   btn.onclick=doRematch;
   G.nextAction=null;
+  refreshNames();
+  if(world.refit)world.refit();
+  beginPlace();
 }
 
 function sendChat(text){
@@ -622,6 +881,7 @@ function rtcLobby(){
     room.onOpen=()=>{
       G.mode='host';G.myColor=GAME.RED;
       G.state=GAME.initialState();
+      G.transport.send({t:'who',uid:(SRV.me&&SRV.me.id)||null,name:MYNAME,handle:MYHANDLE});
     };
     G.transport=room;
     try{
@@ -646,7 +906,7 @@ function rtcLobby(){
       room=new RTCRoom(onMessage);
       G.rtcWasHost=false;
       G.transport=room;
-      room.onOpen=()=>{G.mode='guest';G.myColor=GAME.BLACK;G.transport.send({t:'hello'});};
+      room.onOpen=()=>{G.mode='guest';G.myColor=GAME.BLACK;G.transport.send({t:'hello'});G.transport.send({t:'who',uid:(SRV.me&&SRV.me.id)||null,name:MYNAME,handle:MYHANDLE});};
       watchLink(room);
       const ans=await room.acceptOffer($('#rtc-in').value);
       $('#rtc-out').value=ans;
@@ -725,7 +985,7 @@ async function joinByCode(code){
   const r=new RTCRoom(onMessage);
   G.rtcWasHost=false;
   G.transport=r;
-  r.onOpen=()=>{G.mode='guest';G.myColor=GAME.BLACK;G.transport.send({t:'hello'});};
+  r.onOpen=()=>{G.mode='guest';G.myColor=GAME.BLACK;G.transport.send({t:'hello'});G.transport.send({t:'who',uid:(SRV.me&&SRV.me.id)||null,name:MYNAME,handle:MYHANDLE});};
   r.onState=s2=>{
     if(s2==='connecting')st('Negotiating link\u2026');
     else if(s2==='connected')st('Link established \u2014 entering duel\u2026');
@@ -741,9 +1001,13 @@ async function joinByCode(code){
 
 function teardownNet(){
   clearTimeout(G.aiTimer);
+  presStop();
   if(G.transport){try{G.transport.close();}catch(e){}}
   G.transport=null;G.mode=null;G.myColor=null;G.peerSeen=false;
+  G.duelId=null;G._stakeWait=false;G.wagerN=0;
   G.gv=null;G.blazing=false;G.record=[];G.wagerN=0;G.pz=null;
+  G.behind=false;G.deficit=0;
+  G.watchNames=null;OPPNAME=null;
   show($('#mode-banner'),false);
   show($('#btn-wager'),false);
   show($('#btn-watch'),false);
@@ -758,12 +1022,17 @@ function tcSelect(id,cur){
 
 /* ================= hotseat ================= */
 
-function startHotseat(tcId){
+function fogToggle(id){
+  return `<label class="fog-opt"><input type="checkbox" id="${id}"/> <span>Fog of War</span> <em>— hidden information: each side only sees the squares its own scouts touch. Pass &amp; Play or solo vs Storm.</em></label>`;
+}
+
+function startHotseat(tcId,fog){
   teardownNet();
   G.clockId=tcId||'none';
   G.clock=new Clocks(G.clockId);
   G.clockInited=false;
   G.mode='hotseat';G.myColor=null;
+  G.fog=!!fog;
   G.state=GAME.initialState();
   G.started=true;
   enterMatch();
@@ -773,8 +1042,8 @@ function startHotseat(tcId){
 }
 
 function hotseatLobby(){
-  openLobby('<h2>Pass &amp; Play</h2><p class="hint">Two duelists, one device. Optional clock keeps the pace honest.</p>'+tcSelect('hs-tc')+'<div class="row"><button class="btn primary" id="hs-go">Start Duel</button></div>');
-  $('#hs-go').onclick=()=>{sfx.click();startHotseat($('#hs-tc').value);};
+  openLobby('<h2>Pass &amp; Play</h2><p class="hint">Two duelists, one device. Optional clock keeps the pace honest.</p>'+tcSelect('hs-tc')+fogToggle('hs-fog')+'<div class="row"><button class="btn primary" id="hs-go">Start Duel</button></div>');
+  $('#hs-go').onclick=()=>{sfx.click();startHotseat($('#hs-tc').value,$('#hs-fog').checked);};
 }
 
 /* ================= AI duel ================= */
@@ -812,13 +1081,15 @@ function aiLobby(){
       <button class="btn lv" data-lv="master">${LEVEL_NAMES.master}</button>
     </div>
     ${tcSelect('ai-tc')}
+    ${fogToggle('ai-fog')}
     <div class="status">Squire is forgiving. Storm Monarch is not. Each duelist has a mind of their own.</div>`);
-  $('#lobby').querySelectorAll('.lv').forEach(b=>b.onclick=()=>{sfx.click();startAI(b.dataset.lv,$('#ai-tc').value);});
+  $('#lobby').querySelectorAll('.lv').forEach(b=>b.onclick=()=>{sfx.click();startAI(b.dataset.lv,$('#ai-tc').value,$('#ai-fog').checked);});
 }
 
-function startAI(level,tcId){
+function startAI(level,tcId,fog){
   teardownNet();
   G.mode='ai';G.myColor=GAME.RED;G.aiLevel=level;
+  G.fog=!!fog;
   G.clockId=tcId||'none';
   G.clock=new Clocks(G.clockId);
   G.clockInited=false;
@@ -833,6 +1104,217 @@ function startAI(level,tcId){
   updateHUD();
   toast(`Duel vs ${LEVEL_NAMES[level]} \u2014 you are Ember`,'good');
   if(G.persona)setTimeout(()=>showTaunt(G.persona.start),800);
+}
+
+/* ================= correspondence duels ================= */
+
+function corrClose(){show($('#lobby'),false);if(!G.started)show($('#menu'),true);}
+
+async function corrMenu(){
+  await srvInit();
+  openLobby('<h2>Correspondence</h2><div class="status">Loading…</div>');
+  if(!SRV.ok){
+    $('#lobby').innerHTML='<h2>Correspondence</h2><p class="hint">The backend is offline right now, so long-form duels are unavailable. Play solo or pass-and-play meanwhile.</p><div class="row"><button class="btn" id="corr-close">Close</button></div>';
+    $('#corr-close').onclick=()=>{sfx.click();corrClose();};
+    return;
+  }
+  if(!SRV.me){
+    $('#lobby').innerHTML='<h2>Correspondence</h2><p class="hint">Sign in from the menu (Account) to challenge rivals and pick your duels up on any device.</p><div class="row"><button class="btn primary" id="corr-close">Close</button></div>';
+    $('#corr-close').onclick=()=>{sfx.click();corrClose();};
+    return;
+  }
+  renderCorr();
+}
+
+function corrCard(g){
+  const you=g.my_turn?'<span class="corr-badge">your move</span>':'';
+  const watch=g.last_seq>0?`<button class="btn small" data-corr="watch" data-id="${g.id}">Watch</button> `:'';
+  let btns='';
+  if(g.status==='pending'&&g.me_side==='guest')
+    btns=`<button class="btn primary" data-corr="accept" data-id="${g.id}">Accept</button> <button class="btn" data-corr="decline" data-id="${g.id}">Decline</button>`;
+  else if(g.status==='active')
+    btns=`${watch}<button class="btn ${g.my_turn?'primary':''}" data-corr="open" data-id="${g.id}">${g.my_turn?'Make your move':'Resume'}</button>`;
+  else
+    btns=`${watch}<button class="btn" data-corr="open" data-id="${g.id}">View result</button>`;
+  const label=g.status==='pending'?'invitation':(g.status==='active'?'live':'finished');
+  return `<div class="corr-row"><div class="corr-info"><b>${esc(g.opp_name)}</b> <span class="corr-tag">${label}</span>${you}</div><div class="corr-act">${btns}</div></div>`;
+}
+
+async function renderCorr(){
+  const res=await corrList();
+  const games=(res&&res.games)||[];
+  let html='<h2>Correspondence</h2><p class="hint">Long-form duels — trade a move whenever you like, from any device. As host you play Ember (Red) and move first.</p>';
+  html+='<div class="corr-new"><label>Challenge a rival by handle</label><div class="row"><input type="text" id="corr-handle" placeholder="their handle" maxlength="18"/><button class="btn" id="corr-send">Send</button></div></div>';
+  html+='<div class="corr-list">'+(games.length?games.map(corrCard).join(''):'<div class="status">No correspondence duels yet — send the first challenge.</div>')+'</div>';
+  html+='<div class="row"><button class="btn" id="corr-close">Close</button></div>';
+  $('#lobby').innerHTML=html;
+  bindCorrList();
+}
+
+function bindCorrList(){
+  const send=$('#corr-send');
+  if(send)send.onclick=async()=>{
+    const h=($('#corr-handle').value||'').trim();
+    if(!h)return;
+    send.disabled=true;send.textContent='…';
+    const p=await findHandle(h);
+    if(!p){toast('No player named '+h,'bad');send.disabled=false;send.textContent='Send';return;}
+    const r=await corrCreate(p.uid,world.currentTheme?world.currentTheme():null);
+    if(r.ok){toast('Challenge sent to '+p.handle,'good');renderCorr();}
+    else{toast(r.why||'Could not send challenge','bad');send.disabled=false;send.textContent='Send';}
+  };
+  for(const b of $('#lobby').querySelectorAll('[data-corr]')){
+    b.onclick=()=>{
+      const id=+b.dataset.id,act=b.dataset.corr;
+      if(act==='accept'){b.disabled=true;corrJoin(id).then(r=>{if(r.ok){toast('Duel accepted','good');openCorr(id);}else{toast(r.why||'failed','bad');b.disabled=false;}});}
+      else if(act==='decline'){b.disabled=true;corrDecline(id).then(()=>renderCorr());}
+      else if(act==='open')openCorr(id);
+      else if(act==='watch')watchCorr(id);
+    };
+  }
+  const c=$('#corr-close');if(c)c.onclick=()=>{sfx.click();corrClose();};
+}
+
+async function openCorr(id){
+  const g=await corrGame(id);
+  if(!g){toast('Could not load that duel','bad');return;}
+  show($('#lobby'),false);
+  startCorr(g);
+}
+
+async function watchCorr(id){
+  const g=await corrGame(id);
+  if(!g||!g.moves||!g.moves.length){toast('Nothing to replay yet','bad');return;}
+  const moves=g.moves.map(m=>m.move);
+  const started=openViewer(GAME,world,buildCode(moves,0,'corr'),()=>{if(G.started&&G.state){show($('#hud'),true);renderBoard();}else show($('#menu'),true);});
+  if(!started)toast('Could not start the replay','bad');
+}
+
+function startCorr(g){
+  teardownNet();
+  const s=corrState(g);
+  G.mode='corr';G.myColor=s.myColor;G.corrId=g.id;
+  G.clock=null;G.clockId='none';G.clockInited=false;
+  G.state=s.state;G.over=s.over;G.busy=false;G.record=[];
+  $('#log').innerHTML='';
+  world.showLastMove(null);
+  if(g.theme&&THEMES&&THEMES[g.theme]){world.setTheme(g.theme);roomTheme=g.theme;try{lsSet('ad-theme',g.theme);}catch(e){}}
+  show($('#result'),false);
+  enterMatch();
+  renderBoard(true);
+  refreshMoves();
+  updateHUD();
+  if(s.over)endGame(s.winner,false);
+  else if(!s.myTurn)toast('Waiting for '+s.oppName+' to reply — check back any time','good');
+  else toast('Your move, '+G.dispName[G.myColor],'good');
+}
+
+/* ================= leaderboards ================= */
+
+let boardsTab='corr';
+function boardRow(a,b){return `<div class="corr-row"><div class="corr-info">${a}</div><div class="corr-act"><span class="corr-tag">${b}</span></div></div>`;}
+async function boardsMenu(tab){boardsTab=tab||boardsTab;await srvInit();openLobby('<h2>Leaderboards</h2><div class="status">Loading…</div>');renderBoards();}
+async function renderBoards(){
+  const tabs=[['elo','Ladder'],['wr','Win rate'],['corr','Correspondence'],['fast','Quickest wins'],['long','Longest duels']];
+  const nav=tabs.map(t=>`<button class="btn small ${t[0]===boardsTab?'primary':''}" data-board="${t[0]}">${t[1]}</button>`).join(' ');
+  let body='<div class="status">Loading…</div>';
+  try{
+    if(boardsTab==='elo'){const rows=await authLadder(50);body=rows.map((r,i)=>boardRow(`<b>${i+1}. ${esc(r.handle)}</b>`,`${r.elo} · ${r.wins}-${r.losses}`)).join('')||'<div class="status">The ladder is empty.</div>';}
+    else if(boardsTab==='wr'){const rows=await ladderWinrate();body=rows.map(r=>boardRow(`<b>${esc(r.handle)}</b>`,`${r.winrate}% · ${r.wins}-${r.losses}`)).join('')||'<div class="status">No qualified duelists yet (min 3 rated games).</div>';}
+    else if(boardsTab==='corr'){const rows=await corrStandings();body=rows.map(r=>boardRow(`<b>${esc(r.handle)}</b>`,`${r.wins}W · ${r.played} played · ${r.winrate==null?'—':r.winrate+'%'}`)).join('')||'<div class="status">No finished correspondence duels yet.</div>';}
+    else if(boardsTab==='fast'){const rows=await corrQuickest();body=rows.map(r=>boardRow(`<b>${esc(r.winner_name)}</b> <span class="corr-tag">over ${esc(r.host_name===r.winner_name?r.guest_name:r.host_name)}</span>`,`${r.moves} moves`)).join('')||'<div class="status">No decisive correspondence wins yet.</div>';}
+    else{const rows=await corrLongest();body=rows.map(r=>boardRow(`<b>${esc(r.host_name)}</b> <span class="corr-tag">vs</span> <b>${esc(r.guest_name)}</b>`,`${r.moves} moves`)).join('')||'<div class="status">No finished duels yet.</div>';}
+  }catch(e){body='<div class="status">Board unavailable right now.</div>';}
+  $('#lobby').innerHTML=`<h2>Leaderboards</h2><div class="board-tabs">${nav}</div><div class="corr-list">${body}</div><div class="row"><button class="btn" id="bd-close">Close</button></div>`;
+  for(const b of $('#lobby').querySelectorAll('[data-board]'))b.onclick=()=>{sfx.click();boardsTab=b.dataset.board;renderBoards();};
+  const c=$('#bd-close');if(c)c.onclick=()=>{sfx.click();corrClose();};
+}
+
+/* ================= spectator betting on ranked duels ================= */
+
+let betsTab='open';
+async function betsMenu(tab){betsTab=tab||betsTab;await srvInit();openLobby('<h2>Ranked Betting</h2><div class="status">Loading…</div>');renderBets();}
+async function renderBets(){
+  const me=SRV.ok&&SRV.me;
+  const bal=me?(await stakeBalance()):null;
+  const tabs=[['open','Live duels'],['mine','My bets']];
+  const nav=tabs.map(t=>`<button class="btn small ${t[0]===betsTab?'primary':''}" data-bets="${t[0]}">${t[1]}</button>`).join(' ');
+  const hdr='<h2>Ranked Betting</h2><div class="board-tabs">'+nav+'</div>'
+    +'<div class="status">'+(me?('Stake balance <b>stk '+(bal==null?0:bal)+'</b> · pari-mutuel: winners split the losing pool; the payout lands once both players attest the result.'):'Sign in to place bets. The live board is public.')+' <button class="btn small" id="bet-claim">Claim daily stakes</button></div>';
+  let body='<div class="status">Loading…</div>';
+  try{
+    if(betsTab==='mine'){
+      if(!me)body='<div class="status">Sign in to see your bets.</div>';
+      else{const rows=await betMine();body=rows.map(r=>{const side=r.pick==='a'?r.a_handle:r.b_handle;
+        const tag=r.status==='won'?('won stk '+r.payout):r.status==='lost'?'lost':r.status==='refunded'?'refunded':'open';
+        return boardRow(`<b>${esc(r.a_handle)} vs ${esc(r.b_handle)}</b> <span class="corr-tag">on ${esc(side)}</span>`,`stk ${r.stake} · ${tag}`);}).join('')||'<div class="status">No bets yet.</div>';}
+    }else{
+      const rows=await duelsOpen();
+      body=rows.map(d=>{const act=me
+        ?`<div class="corr-act"><button class="btn small" data-bet="${d.id}" data-pick="a">Back ${esc(d.a_handle)} (${d.pool_a})</button> <button class="btn small" data-bet="${d.id}" data-pick="b">Back ${esc(d.b_handle)} (${d.pool_b})</button></div>`
+        :`<div class="corr-act"><span class="corr-tag">pool ${d.pool_a} / ${d.pool_b}</span></div>`;
+        return `<div class="corr-row"><div class="corr-info"><b>${esc(d.a_handle)} vs ${esc(d.b_handle)}</b><div class="corr-meta">duel stake stk ${d.stake} · pools ${d.pool_a} / ${d.pool_b}</div></div>${act}</div>`;
+      }).join('')||'<div class="status">No live ranked duels right now. Wagered duels appear here so spectators can bet on the outcome.</div>';
+    }
+  }catch(e){body='<div class="status">Betting board unavailable right now.</div>';}
+  $('#lobby').innerHTML=hdr+`<div class="corr-list">${body}</div><div class="row"><button class="btn" id="bet-close">Close</button></div>`;
+  for(const b of $('#lobby').querySelectorAll('[data-bets]'))b.onclick=()=>{sfx.click();betsTab=b.dataset.bets;renderBets();};
+  for(const b of $('#lobby').querySelectorAll('[data-bet]'))b.onclick=async()=>{sfx.click();
+    const id=+b.dataset.bet,pick=b.dataset.pick;
+    const n=parseInt(await askText('Place a bet','Pari-mutuel escrow: paid only if your pick wins the two-party-verified result. (1–50000)','25','Bet'),10);
+    if(!(n>=1&&n<=50000)){toast('Bet must be 1–50000');return;}
+    const res=await betPlace(id,pick,n);
+    if(res&&res.ok){toast('Bet placed · stk '+n);renderBets();}else if(res&&res.why)toast(res.why);
+  };
+  const cl=$('#bet-claim');if(cl)cl.onclick=async()=>{sfx.click();const r=await stakeClaimDaily();if(r&&r.ok)toast('Daily stakes claimed');else if(r&&r.why)toast(r.why);renderBets();};
+  const c=$('#bet-close');if(c)c.onclick=()=>{sfx.click();corrClose();};
+}
+
+/* ================= rivals / follow graph ================= */
+
+async function rivalsMenu(){
+  await srvInit();
+  openLobby('<h2>Rivals</h2><div class="status">Loading…</div>');
+  if(!SRV.ok||!SRV.me){
+    $('#lobby').innerHTML='<h2>Rivals</h2><p class="hint">'+(SRV.ok?'Sign in from the menu (Account) to track rivals and friends.':'The backend is offline right now.')+'</p><div class="row"><button class="btn primary" id="rv-close">Close</button></div>';
+    $('#rv-close').onclick=()=>{sfx.click();corrClose();};return;
+  }
+  renderRivals();
+}
+function rivalRow(r){
+  const rel=r.mutual?'mutual':(r.i_follow?'you follow':(r.follows_me?'follows you':''));
+  const relTag=rel?`<span class="corr-tag">${rel}</span>`:'';
+  const unf=r.i_follow?`<button class="btn small" data-rv="unfollow" data-uid="${r.uid}">Unfollow</button>`:'';
+  const ch=r.follows_me?`<button class="btn small primary" data-rv="challenge" data-uid="${r.uid}">Challenge</button>`:'';
+  return `<div class="corr-row"><div class="corr-info"><b>${esc(r.handle)}</b> <span class="corr-tag">${r.elo}</span>${relTag}${r.follows_me?'<span class="corr-badge">follows you</span>':''}</div><div class="corr-act">${ch}${unf}</div></div>`;
+}
+async function renderRivals(){
+  const res=await rivals();
+  const list=(res&&res.rivals)||[];
+  let html='<h2>Rivals</h2><p class="hint">Follow duelists to keep them close, and challenge a mutual to a correspondence duel.</p>';
+  html+='<div class="corr-new"><label>Follow a duelist by handle</label><div class="row"><input type="text" id="rv-handle" placeholder="their handle" maxlength="18"/><button class="btn" id="rv-follow">Follow</button></div></div>';
+  html+='<div class="corr-list">'+(list.length?list.map(rivalRow).join(''):'<div class="status">You are not tracking anyone yet.</div>')+'</div>';
+  html+='<div class="row"><button class="btn" id="rv-close">Close</button></div>';
+  $('#lobby').innerHTML=html;
+  bindRivals();
+}
+function bindRivals(){
+  const f=$('#rv-follow');
+  if(f)f.onclick=async()=>{
+    const h=($('#rv-handle').value||'').trim();if(!h)return;
+    f.disabled=true;const p=await findHandle(h);
+    if(!p){toast('No player named '+h,'bad');f.disabled=false;return;}
+    const r=await follow(p.uid);
+    if(r.ok){toast('Following '+p.handle,'good');renderRivals();}else{toast(r.why||'failed','bad');f.disabled=false;}
+  };
+  for(const b of $('#lobby').querySelectorAll('[data-rv]')){
+    b.onclick=async()=>{
+      const uid=b.dataset.uid,act=b.dataset.rv;
+      if(act==='unfollow'){b.disabled=true;await unfollow(uid);renderRivals();}
+      else if(act==='challenge'){b.disabled=true;const r=await corrCreate(uid,world.currentTheme?world.currentTheme():null);toast(r.ok?'Challenge sent — open Correspondence to track it':(r.why||'failed'),r.ok?'good':'bad');b.disabled=false;}
+    };
+  }
+  const c=$('#rv-close');if(c)c.onclick=()=>{sfx.click();corrClose();};
 }
 
 /* ================= QuantKing — beat the machine, earn the points ================= */
@@ -953,6 +1435,7 @@ $('#b-ai').onclick=()=>{sfx.click();aiLobby();};
 $('#b-quant').onclick=()=>{sfx.click();quantLobby();};
 $('#b-online').onclick=()=>{sfx.click();rtcLobby();};
 $('#b-local').onclick=()=>{sfx.click();localLobby();};
+$('#b-corr').onclick=()=>{sfx.click();corrMenu();};
 $('#b-howto').onclick=()=>{sfx.click();show($('#menu'),false);show($('#howto'),true);};
 $('#b-howto-close').onclick=()=>{sfx.click();show($('#howto'),false);show($('#menu'),true);};
 $('#btn-quit').onclick=()=>location.reload();
@@ -970,6 +1453,15 @@ $('#btn-theme-mode').onclick=()=>{
 $('#btn-resign').onclick=()=>{
   if(!G.started||G.over)return;
   sfx.click();
+  if(G.mode==='corr'){
+    if(G.state.turn!==G.myColor){toast('You can only resign on your own turn','bad');return;}
+    const opp=G.myColor===GAME.RED?GAME.BLACK:GAME.RED;
+    clearTimeout(G.aiTimer);
+    G.state={...G.state,winner:opp};G.over=true;endGame(opp,true);
+    if(G.corrId)corrResign(G.corrId).then(r=>{if(!r.ok)toast('Resignation not saved ('+(r.why||'')+')','bad');});
+    corrMenu();
+    return;
+  }
   const winner=isOnline()||G.mode==='ai'
     ?(G.myColor===GAME.RED?GAME.BLACK:GAME.RED)
     :(G.state.turn===GAME.RED?GAME.BLACK:GAME.RED);
@@ -1039,11 +1531,12 @@ $('#b-themes-close').onclick=()=>{sfx.click();show($('#themes'),false);};
 /* ================= clocks & turn timers ================= */
 
 function armTurn(){
-  if(G.clock&&G.clock.on){G.turnEnd=null;return;}
-  if(G.blazing)G.turnEnd=performance.now()+15000;
-  else if(isOnline())G.turnEnd=performance.now()+45000;
-  else G.turnEnd=null;
+  G.turnMoves=G.state?G.state.moveNo:0;
   G.lastTick=0;
+  G.turnLen=G.blazing?BLAZING_MS:TURN_MS;
+  updateMoveHud();
+  if(G.clock&&G.clock.on){G.turnEnd=null;return;}
+  G.turnEnd=performance.now()+G.turnLen;
 }
 
 world.onFrame(dt=>{
@@ -1064,25 +1557,28 @@ world.onFrame(dt=>{
     eb.classList.toggle('low',side==='black'&&low);
     if(low&&G.clock.beepSecond(Math.ceil(G.clock.t[side]))&&G.mode!=='guest')sfx.tick();
     if(flag)flagFall(flag);
+    show($('#timer-wrap'),false);show($('#timer-secs'),false);
     return;
   }
-  if((isOnline()||G.blazing)&&G.turnEnd){
-    const left=G.turnEnd-performance.now();
-    const len=G.blazing?15000:45000;
-    const bar=$('#timer-bar');
-    bar.style.width=Math.max(0,left/len*100)+'%';
-    bar.classList.toggle('low',left<10000);
-    const secs=Math.ceil(left/1000);
-    if(secs<=5&&secs>0&&secs!==G.lastTick){G.lastTick=secs;sfx.tick();}
-    if(left<=0&&!G.busy){
-      const moverOk=G.mode==='host'||(G.mode==='ai'&&G.state.turn===GAME.RED);
-      if(moverOk){
-        const opts=GAME.legalMoves(G.state);
-        if(opts.length){
-          toast('Turn timer \u2014 auto-moving','bad');
-          playMove(opts[Math.random()*opts.length|0]);
-        }
-      }
+  /* per-move turn clock — re-armed every time the move number changes */
+  if(G.turnMoves!==G.state.moveNo){G.turnMoves=G.state.moveNo;G.turnEnd=performance.now()+G.turnLen;G.lastTick=0;}
+  if(!G.turnEnd){show($('#timer-wrap'),false);setTimerSecs(0);return;}
+  if(G.busy)G.turnEnd+=dt*1000;   // freeze during the walk-in, move animations & inspection
+  const left=G.turnEnd-performance.now();
+  show($('#timer-wrap'),true);
+  const bar=$('#timer-bar');
+  bar.style.width=Math.max(0,Math.min(1,left/G.turnLen)*100)+'%';
+  bar.classList.toggle('low',left<10000);
+  const secs=Math.max(0,Math.ceil(left/1000));
+  setTimerSecs(secs);
+  if(secs<=5&&secs>0&&secs!==G.lastTick){G.lastTick=secs;if(G.mode!=='guest')sfx.tick();}
+  if(left<=0&&!G.busy){
+    if(localMoverOk()){
+      const opts=GAME.legalMoves(G.state);
+      if(opts.length){toast('Turn timer \u2014 auto-moving','bad');playMove(opts[Math.random()*opts.length|0]);}
+      else G.turnEnd=null;
+    }else{
+      G.turnEnd=performance.now()+G.turnLen;   // remote/AI is to move — keep counting, never auto-move for them
     }
   }
 });
@@ -1140,12 +1636,24 @@ function confirmBox(title,sub){
 
 /* ================= wagers ================= */
 
+function canServerStake(){return isOnline()&&SRV.ok&&SRV.me&&SRV.oppUid&&SRV.oppUid!==SRV.me.id;}
+
 async function proposeWager(){
   if(!isOnline()){toast('Wagers need an online duel');return;}
-  if(G.wagerN>0){toast('A wager is already staked this duel');return;}
-  const t=await askText('Wager this duel','Stake coins on your own victory. Winner takes both stakes (10–5000).','250','Offer');
+  if(G.wagerN>0||G.duelId){toast('A stake is already set this duel');return;}
+  const staked=canServerStake();
+  const t=await askText('Stake this duel',
+    staked?'Two-party verified escrow: stakes are held up-front and paid only if you both attest the result. (10–5000)':'Stake coins on your own victory. Winner takes both stakes (10–5000).','250','Offer');
   const n=parseInt(t,10);
-  if(!(n>=10&&n<=5000)){toast('Wager must be 10–5000 coins');return;}
+  if(!(n>=10&&n<=5000)){toast('Stake must be 10–5000');return;}
+  if(staked){
+    const bal=await stakeBalance();
+    if(!(bal>=n)){toast('You hold '+(bal||0)+' stakes — claim your daily stake, or lower the amount','bad');return;}
+    G._stakeWait=true;
+    G.transport.send({t:'wager-ask',n,stake:true});
+    toast('Stake offer sent — awaiting opponent');
+    return;
+  }
   if(!ECO.canWager(n)){toast('Not enough coins — top up in the Marketplace');return;}
   if(!ECO.escrowWager(n)){toast('Escrow failed');return;}
   G.wagerN=n;
@@ -1153,27 +1661,37 @@ async function proposeWager(){
   G.transport.send({t:'wager-ask',n});
   toast('Wager offer sent — awaiting opponent');
 }
-async function offerWager(n){
+async function offerWager(n,staked){
   if(!isOnline())return;
-  const ok=await confirmBox('Wager offered','Your opponent stakes '+n+' coins. Match it?');
-  if(ok&&ECO.canWager(n)&&ECO.escrowWager(n)){
-    G.wagerN=n;
-    refreshWallet();
+  const ok=await confirmBox('Stake offered',
+    staked?('Your opponent stakes '+n+' stakes (server escrow). Match it?'):('Your opponent stakes '+n+' coins. Match it?'));
+  if(!ok){G.transport.send({t:'wager-no'});return;}
+  if(staked){
+    const bal=await stakeBalance();
+    if(!(bal>=n)){toast('You hold '+(bal||0)+' stakes — cannot match','bad');G.transport.send({t:'wager-no'});return;}
+    const r=await duelOpen(SRV.oppUid,(SEED>>>0),n);
+    if(!r.ok){toast('Escrow failed: '+(r.why||''), 'bad');G.transport.send({t:'wager-no'});return;}
+    G.duelId=r.id;G._stakeWait=false;
+    G.transport.send({t:'wager-ok',n,stake:true});
+    G.transport.send({t:'duel',id:r.id});
+    toast('Staked '+n+' stakes — held in escrow','good');
+    return;
+  }
+  if(ECO.canWager(n)&&ECO.escrowWager(n)){
+    G.wagerN=n;refreshWallet();
     G.transport.send({t:'wager-ok',n});
     toast('Wager on: '+n+' coins each','good');
-  }else{
-    if(ok)toast('Not enough coins to match');
-    G.transport.send({t:'wager-no'});
-  }
+  }else{toast('Not enough coins to match','bad');G.transport.send({t:'wager-no'});}
 }
-function confirmWager(n,msg){
+function confirmWager(n,staked,msg){
+  if(staked){
+    if(G.duelId||G._stakeWait){toast(msg,'good');return;}
+    toast('Opponent accepted — finalising escrow…');return;
+  }
   if(G.wagerN===n){toast(msg,'good');return;}
   if(G.wagerN>0){G.transport.send({t:'wager-no'});return;}
-  if(ECO.canWager(n)&&ECO.escrowWager(n)){
-    G.wagerN=n;
-    refreshWallet();
-    toast(msg,'good');
-  }else G.transport.send({t:'wager-no'});
+  if(ECO.canWager(n)&&ECO.escrowWager(n)){G.wagerN=n;refreshWallet();toast(msg,'good');}
+  else G.transport.send({t:'wager-no'});
 }
 $('#btn-wager').onclick=()=>{sfx.click();proposeWager();};
 
@@ -1223,19 +1741,26 @@ function puzzleJudge(move){
     }
     sfx.win();
     showTaunt('The chain holds!');
-    showPzEnd('CHAIN COMPLETE','A flawless '+G.pz.target+'-capture hunt.'+reward);
+    const st=RET.markPuzzle(true);
+    showPzEnd('CHAIN COMPLETE','A flawless '+G.pz.target+'-capture hunt.'+reward+'  ·  Streak '+st,true);
   }else{
     const line=G.pz.solution.path.map(GAME.sqName).join('\u2192');
     world.showTargets([G.pz.solution]);
     G.pz.solution.captures.forEach(sq=>world.burst(sq,0xff9d2e,12));
     sfx.error();
-    showPzEnd('THE HUNT SLIPS','The true chain was '+line+' \u2014 '+G.pz.target+' captures.');
+    RET.markPuzzle(false);
+    showPzEnd('THE HUNT SLIPS','The true chain was '+line+' \u2014 '+G.pz.target+' captures.',false);
   }
   G.over=true;
 }
-function showPzEnd(title,sub){
+function showPzEnd(title,sub,solved){
   $('#pz-title').textContent=title;
   $('#pz-sub').textContent=sub;
+  const share=$('#pz-share');
+  if(share){
+    share.style.display=solved===undefined?'none':'';
+    share.onclick=()=>copyText(RET.shareCard(!!solved));
+  }
   show($('#pzend'),true);
 }
 $('#pz-btn').onclick=()=>{sfx.click();location.reload();};
@@ -1297,7 +1822,7 @@ function refreshWallet(){
 }
 
 let shopTab='Pieces';
-const ITEMCAT={Pieces:'skin',Boards:'board',Thrones:'throne',Clocks:'clock',Triumphs:'victory',Realms:'theme'};
+const ITEMCAT={Looks:'look',Shapes:'shape',Palettes:'palette',Pieces:'skin',Boards:'board',Thrones:'throne',Clocks:'clock',Triumphs:'victory',Realms:'theme'};
 function shopId(tab,id){return tab==='Realms'?'theme:'+id:id;}
 
 function openShop(tab){
@@ -1321,6 +1846,9 @@ function openShop(tab){
 }
 function descFor(tab){
   if(tab==='Realms')return 'World skin — unlocks in the Worlds picker';
+  if(tab==='Looks')return 'Your avatar — headgear, robes & bearing';
+  if(tab==='Shapes')return 'Silhouette of every man on the board';
+  if(tab==='Palettes')return 'Recolour both armies at once';
   if(tab==='Pieces')return 'Army finish for both colors';
   if(tab==='Boards')return 'Table & board set for the arena';
   if(tab==='Clocks')return 'Timepiece for your corner table';
@@ -1373,6 +1901,9 @@ function equip(tab,id){
   sfx.click();
   if(slot==='skin')world.reskin(id,(SKINS[id]||{}).params||{});
   if(slot==='throne')buildActors();
+  if(slot==='look')buildActors();
+  if(slot==='shape')world.reshape(id);
+  if(slot==='palette'){world.army(armyPalette());buildActors();}
   if(slot==='theme')world.setTheme(id);
   if(slot==='board'||slot==='clock')refreshEnvLook();
   toast('Equipped','good');
@@ -1458,10 +1989,12 @@ function updateAuthUI(){
   if(me&&p){
     btn.textContent='Sign Out';
     const handle=p.handle||(String(me.id).replace(/^local:/,''));
+    MYHANDLE=handle;MYNAME=handle;OPPNAME=null;refreshNames();
     $('#profile-line').innerHTML='@'+handle+' &middot; <b>'+p.elo+'</b> elo &middot; '+p.wins+'W / '+p.losses+'L';
     show($('#profile-line'),true);
   }else{
     btn.textContent='Sign In';
+    MYHANDLE=null;OPPNAME=null;refreshNames();
     show($('#profile-line'),false);
   }
 }
@@ -1533,6 +2066,9 @@ async function openLadder(){
   show($('#ladder'),true);
 }
 $('#b-ladder').onclick=()=>{sfx.click();openLadder();};
+$('#b-rivals').onclick=()=>{sfx.click();rivalsMenu();};
+$('#b-boards').onclick=()=>{sfx.click();boardsMenu('corr');};
+$('#b-bets').onclick=()=>{sfx.click();betsMenu('open');};
 $('#b-ladder-close').onclick=()=>{sfx.click();show($('#ladder'),false);if(!G.started)show($('#menu'),true);};
 
 /* ================= boot ================= */
@@ -1548,6 +2084,49 @@ refreshWallet();
 const RXC={ooo:0x54d6ff,haha:0xffd75e,gg:0x59c98a,storm:0xb06cff};
 let specSeq=0,specRx=0,specPollTimer=null;
 
+/* --- live spectator presence: render watchers as avatars with handle tags --- */
+let _wsid=null;
+function mySid(){if(_wsid)return _wsid;try{_wsid=sessionStorage.getItem('ad-wsid');}catch(e){}if(!_wsid){_wsid='s'+Date.now().toString(36)+Math.random().toString(36).slice(2,7);try{sessionStorage.setItem('ad-wsid',_wsid);}catch(e){}}return _wsid;}
+const SPEC_SEATS=(()=>{const a=[];for(let i=0;i<28;i++){const ang=(i/28)*Math.PI*2+Math.PI/28;if(Math.abs(Math.cos(ang))>0.80)continue;a.push(ang);}return a;})();
+let presObjs={},presPoll=null,presBeat=null,presCode=null,presIsSpec=false,presFrameOn=false;
+function presSeat(i){const ang=SPEC_SEATS[i%SPEC_SEATS.length];const R=8.0;return{x:Math.sin(ang)*R,z:Math.cos(ang)*R,facing:ang+Math.PI};}
+function presRender(rows){
+  rows=(rows||[]).slice(0,10);
+  const keep=new Set();
+  rows.forEach((r,i)=>{keep.add(r.sid);
+    if(presObjs[r.sid])return;
+    const s=presSeat(i);
+    const g=world.makeGroup(s.x,-0.05,s.z);
+    const sv=[...String(r.sid)].reduce((h,ch)=>((h*31+ch.charCodeAt(0))>>>0),7);
+    const av=makeAvatar('black',s.facing,sv,'default',r.look||null);
+    av.group.scale.setScalar(.82);
+    g.add(av.group);
+    const tag=makeNameTag(r.name||'spectator',r.me?'rgba(120,224,255,.95)':undefined);
+    tag.position.set(0,2.35,0);g.add(tag);
+    g.userData.upd=av.update;
+    presObjs[r.sid]=g;
+  });
+  for(const sid in presObjs){if(!keep.has(sid)){world.removeObject(presObjs[sid]);delete presObjs[sid];}}
+}
+function presEnsureFrame(){if(presFrameOn)return;presFrameOn=true;world.onFrame(dt=>{for(const k in presObjs){const u=presObjs[k].userData.upd;if(u)u(dt);}});}
+async function presStart(code,isSpec){
+  presStop();
+  if(!SRV.ok||!code)return;
+  presCode=code;presIsSpec=!!isSpec;presEnsureFrame();
+  const poll=async()=>{if(G.watchCode!==presCode)return;presRender(await watchRoster(presCode,presIsSpec?mySid():null));};
+  if(isSpec)await watchHeartbeat(code,mySid(),MYNAME,avatarLook());
+  poll();
+  presPoll=setInterval(poll,4000);
+  if(isSpec)presBeat=setInterval(()=>{if(G.watchCode===presCode)watchHeartbeat(presCode,mySid(),MYNAME,avatarLook());},20000);
+}
+function presStop(){
+  if(presPoll)clearInterval(presPoll);if(presBeat)clearInterval(presBeat);presPoll=presBeat=null;
+  if(presIsSpec&&presCode)watchLeave(presCode,mySid());
+  for(const k in presObjs){world.removeObject(presObjs[k]);delete presObjs[k];}
+  if(world.followOff)world.followOff();
+  presCode=null;presIsSpec=false;
+}
+
 async function createWatch(){
   const inv=await createInvite('spectate',{code:'W'+srvNewCode(6),name:MYNAME,theme:world.currentTheme()});
   if(!inv.ok){toast('Spectator pass failed: '+inv.why,'bad');return null;}
@@ -1556,6 +2135,7 @@ async function createWatch(){
     pushMove(inv.code,i+1,i%2===0?GAME.RED:GAME.BLACK,G.record[i]);
   }
   copyText(location.origin+location.pathname+'?watch='+inv.code);
+  presStart(inv.code,false);
   toast('Spectator pass created \u2014 link copied','good');
   show($('#btn-watch'),false);
   return inv.code;
@@ -1589,6 +2169,8 @@ async function startSpectate(code){
   teardownNet();
   G.mode='watch';G.myColor=null;G.started=true;G.over=false;
   G.watchCode=code;
+  G.watchNames={host:row.host_name||row.name||null,guest:null};
+  refreshNames();
   world.setTheme(row.theme&&THEMES[row.theme]?row.theme:DEFAULT_THEME);
   G.state=GAME.initialState();
   $('#log').innerHTML='';
@@ -1606,6 +2188,9 @@ async function startSpectate(code){
   toast('You are watching this duel','good');
   clearInterval(specPollTimer);
   specPollTimer=setInterval(specPoll,800);
+  world.followOff&&world.followOff();
+  if(world.refit)world.refit();
+  presStart(code,true);
 }
 let specBusy=false;
 async function specPoll(){
@@ -1622,7 +2207,8 @@ async function specPoll(){
     renderBoard();
     logMove(mv,r.mover,false,r.seq);
     world.showLastMove(mv);
-    $('#turn-text').textContent=(G.state.winner?TEAM_NAME[G.state.winner]+' wins!':TEAM_NAME[r.mover==='red'?'black':'red']+' to move');
+    {const d=mv.path[mv.path.length-1];const v=world.sqToVec(d,.3);world.followTo(v.x,v.z);}
+    $('#turn-text').textContent=(G.state.winner?G.dispName[G.state.winner]+' wins!':G.dispName[r.mover==='red'?'black':'red']+' to move');
     if(mv.captures&&mv.captures.length)crowd.react(mv.captures.length>1?'multi':'capture');
   }
   const rx=await getReactions(G.watchCode,specRx);
@@ -1657,6 +2243,112 @@ function refreshEnvLook(){
 }
 refreshEnvLook();
 world.onClockStrike(()=>sfx.bell());
+
+/* ================= retention: daily hub, streaks, reminders ================= */
+
+const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+function bar(v,max,w=12){v=Math.max(0,Math.min(max,v));return '▰'.repeat(v)+'▱'.repeat(Math.max(0,max-v));}
+
+function renderHub(){
+  const c=RET.career();
+  const q=RET.questBoard();
+  const wotd=RET.worldOfToday();
+  const wotdName=(THEMES[wotd]||{}).name||wotd;
+  const pend=RET.inbox();
+  const earned=new Set(RET.unlockedByMilestone());
+  const sets=RET.setProgress();
+  const c1=(n,v)=>'<div class="hub-stat"><b>'+v+'</b><span>'+n+'</span></div>';
+  const rows=q.map(x=>'<div class="hub-q'+(x.done?' done':'')+'"><span>'+esc(x.q.label)+'</span><em>'+x.prog+'/'+x.q.goal+' \u00B7 +'+x.q.coins+'\u25C7</em><div class="hub-bar"><i style="width:'+Math.round(x.prog/x.q.goal*100)+'%"></i></div></div>').join('');
+  const ms=RET.MILESTONES.map(m=>'<li class="'+(earned.has(m.id)?'ok-l':'')+'">'+(earned.has(m.id)?'\u2713 ':'\u00B7 ')+esc(m.label)+'</li>').join('');
+  const st=sets.map(s=>'<div class="hub-q'+(s.done?' done':'')+'"><span>'+esc(s.set.name)+' \u2014 '+esc(s.set.label)+'</span><em>'+s.have+'/'+s.total+(s.done?' \u00B7 jewel!':'')+'</em><div class="hub-bar"><i style="width:'+Math.round(s.have/s.total*100)+'%"></i></div></div>').join('');
+  const inboxHtml=pend.length?pend.map(p=>'<div class="hub-q"><span>'+esc(p.title||'Correspondence duel')+'</span><em>'+esc(p.status==='wait'?'your move':'awaiting')+'</em></div>').join(''):'<p class="hint">No correspondence duels yet. <b>Correspondence</b> time control sends one move per day.</p>';
+  return ''
+    +'<div class="hub-hero"><div><b>Day '+RET.loginStreak()+'</b><span>login streak</span></div>'
+    +'<div><b>'+RET.puzzleStreak()+'</b><span>puzzle streak '+bar(RET.puzzleStreak(),7)+'</span></div>'
+    +'<div><b>'+ECO.getWallet().coins+'</b><span>coins \u25C7</span></div></div>'
+    +'<h4>World of the Day</h4><div class="hub-wotd"><b>'+esc(wotdName)+'</b><button class="btn small" id="hub-wotd">Dwell here</button></div>'
+    +'<h4>Today\u2019s Quests</h4>'+rows
+    +'<h4>Career</h4><div class="hub-stats">'+c1('won',c.wins)+c1('lost',c.losses)+c1('played',c.played)+c1('best chain',c.bestChain)+c1('best run',c.bestWinStreak)+c1('fastest win',c.fastestWin?c.fastestWin+'m':'\u2014')+c1('captures',c.captures)+c1('comeback',c.biggestComeback||'\u2014')+'</div>'
+    +'<h4>Milestone Unlocks</h4><ul class="hub-ms">'+ms+'</ul>'
+    +'<h4>Collections</h4>'+st
+    +'<h4>Duel Inbox</h4>'+inboxHtml
+    +pushSection();
+}
+
+const PUSH_LS='ad-push-endpoint';
+function pushOn(){try{return !!localStorage.getItem(PUSH_LS);}catch(e){return false;}}
+function pushSection(){
+  const on=pushOn();
+  const avail=CONFIG.PUSH_PUBLIC_KEY&&('serviceWorker' in navigator)&&('PushManager' in window);
+  const status=on?'Reminders are on — we nudge you when a duel waits.':'Nudge me the moment a duel is waiting on my move.';
+  const btn=on?'<button class="btn small" id="hub-push-off">Turn off</button>'
+    :(avail?'<button class="btn small primary" id="hub-push-on">Turn on</button>'
+    :'<span class="corr-tag">not configured on this server</span>');
+  return '<h4>Reminders</h4><div class="hub-wotd"><span>'+status+'</span>'+btn+'</div>';
+}
+function urlBase64ToUint8(s){
+  const pad=s+'='.repeat((4-s.length%4)%4);
+  const b64=pad.replace(/-/g,'+').replace(/_/g,'/');
+  const raw=atob(b64);
+  const out=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)out[i]=raw.charCodeAt(i);
+  return out;
+}
+async function enableReminders(){
+  if(!('serviceWorker' in navigator)||!('PushManager' in window)){toast('This browser cannot receive web push','bad');return;}
+  if(!CONFIG.PUSH_PUBLIC_KEY){toast('Reminders are not configured on this server yet','bad');return;}
+  if(!SRV.me){toast('Sign in first to receive reminders','bad');return;}
+  try{
+    let perm=(window.Notification&&Notification.permission)||'denied';
+    if(perm==='default')perm=await Notification.requestPermission();
+    if(perm!=='granted'){toast('Notifications were blocked','bad');return;}
+    const reg=await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:urlBase64ToUint8(CONFIG.PUSH_PUBLIC_KEY)});
+    const j=sub.toJSON();
+    const r=await pushRegister(j);
+    if(!r.ok){toast('Could not register the reminder ('+(r.why||'')+')','bad');return;}
+    try{localStorage.setItem(PUSH_LS,j.endpoint);}catch(e){}
+    toast('Reminders on','good');refreshHub();
+  }catch(e){toast('Could not enable reminders','bad');}
+}
+async function disableReminders(){
+  let endpoint=null;try{endpoint=localStorage.getItem(PUSH_LS);}catch(e){}
+  try{
+    const reg=await navigator.serviceWorker.getRegistration();
+    const sub=reg&&await reg.pushManager.getSubscription();
+    if(sub)await sub.unsubscribe();
+    if(endpoint)await pushUnregister(endpoint);
+    localStorage.removeItem(PUSH_LS);
+  }catch(e){}
+  toast('Reminders off','good');refreshHub();
+}
+function refreshHub(){$('#hub-body').innerHTML=renderHub();bindHub();}
+function bindHub(){
+  const w=$('#hub-wotd');
+  if(w)w.onclick=()=>{sfx.click();const id=RET.worldOfToday();world.setTheme(id);roomTheme=id;lsSet('ad-theme',id);show($('#hub'),false);show($('#menu'),true);toast((THEMES[id].name)+' envelops you','good');};
+  const on=$('#hub-push-on');if(on)on.onclick=()=>{sfx.click();enableReminders();};
+  const off=$('#hub-push-off');if(off)off.onclick=()=>{sfx.click();disableReminders();};
+}
+function openHub(){
+  $('#hub-body').innerHTML=renderHub();
+  show($('#menu'),false);show($('#hub'),true);
+  bindHub();
+}
+$('#b-hub').onclick=()=>{sfx.click();openHub();};
+$('#b-hub-close').onclick=()=>{sfx.click();show($('#hub'),false);if(!G.started)show($('#menu'),true);};
+
+(function retentionBoot(){
+  try{
+    const bonus=ECO.getDailyBonus();
+    const lg=RET.touchLogin();
+    if(bonus)toast('Daily login bonus  +'+bonus+' coins','good');
+    if(lg.isNewDay&&lg.streak>1)toast('Day '+lg.streak+' \u2014 keep the storm coming','good');
+    if(lg.jewel)toast('7-day streak! Gilded Throne unlocked in the Marketplace','good');
+    const pend=RET.pendingInbox();
+    if(pend.length){RET.requestNotify();setTimeout(()=>RET.fireReminder(),1600);}
+  }catch(e){}
+})();
 
 function toggleInspect(){
   if(world.inspecting)world.exitClockInspect();
@@ -1756,10 +2448,16 @@ window.addEventListener('online',()=>{
 });
 
 window.addEventListener('pagehide',()=>{flushAssets();});
-document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')flushAssets();});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){flushAssets();music.suspend();}else music.resume();});
+
+/* start ambient music on the first user gesture (autoplay policy) */
+(function unlockMusic(){
+  const go=()=>{music.begin();['pointerdown','keydown','touchstart'].forEach(ev=>window.removeEventListener(ev,go));};
+  ['pointerdown','keydown','touchstart'].forEach(ev=>window.addEventListener(ev,go,{passive:true}));
+})();
 
 window.__aether={G,world,GAME,playMove,refreshMoves,rigs,
   eco:ECO,doEmote,startPuzzle,startGauntlet,gvRound,openShop,showTaunt,buildCode,parseCode,
   endGame,startHotseat,SRV,createWatch,startSpectate,joinByCode,proposeWager,
-  refreshEnvLook,toggleInspect,CLOCKS,quantLobby,startQuant,
+  refreshEnvLook,toggleInspect,CLOCKS,quantLobby,startQuant,music,sfx,cosmetics:{AVATARS,SHAPES,PALETTES,getEquip,setEquip,unlocked,avatarLook,armyPalette},ret:RET,
   get crowd(){return crowd;},get seed(){return SEED;}};

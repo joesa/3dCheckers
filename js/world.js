@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 import {RoomEnvironment} from 'three/addons/environments/RoomEnvironment.js';
 import {addTween,stepTweens,easeOutBack,easeInOutQuad} from './tween.js';
-import {makePiece,addCrown,TEAM_COLORS,setSkin,setEnv} from './pieces.js';
+import {makePiece,addCrown,TEAM_COLORS,setSkin,setEnv,setShape,setArmy as setArmyColors} from './pieces.js';
 import {THEMES,DEFAULT_THEME} from './themes.js';
 import {makeClock,THEME_CLOCKS} from './clocks.js';
 
@@ -110,8 +110,11 @@ export function createWorld(canvas,initialTheme){
   rim.position.set(-9,4,-11);
   scene.add(rim);
 
-  /* ---------------- floating island ---------------- */
+  /* ---------------- floating island (one of several world "forms") ---------------- */
+  const islandGroup=new THREE.Group();
+  scene.add(islandGroup);
   const rockMat=new THREE.MeshStandardMaterial({color:0x4a4166,roughness:.95,metalness:0,flatShading:true});
+  const domeMat=new THREE.MeshStandardMaterial({color:0x2a2436,roughness:1,metalness:0,side:THREE.BackSide,flatShading:true});
   const spire=new THREE.Mesh(new THREE.CylinderGeometry(8.4,1.3,9.5,42,6),rockMat);
   spire.position.y=-4.85;
   {
@@ -128,18 +131,18 @@ export function createWorld(canvas,initialTheme){
     spire.geometry.computeVertexNormals();
   }
   spire.receiveShadow=true;
-  scene.add(spire);
+  islandGroup.add(spire);
 
   const grassMat=new THREE.MeshStandardMaterial({color:0x3f5a45,roughness:.9});
   const grass=new THREE.Mesh(new THREE.CylinderGeometry(9.3,8.1,1.3,48),grassMat);
   grass.position.y=-.7;grass.receiveShadow=true;
-  scene.add(grass);
+  islandGroup.add(grass);
 
   const platMat=new THREE.MeshStandardMaterial({color:0x4a4460,roughness:.8,metalness:.1});
   const platform=new THREE.Mesh(new THREE.CylinderGeometry(5.9,6.2,.75,8),platMat);
   platform.rotation.y=Math.PI/8;
   platform.position.y=-.32;platform.receiveShadow=true;
-  scene.add(platform);
+  islandGroup.add(platform);
 
   /* glow ring under board */
   const glowRing=new THREE.Mesh(new THREE.TorusGeometry(6.05,.05,8,72),new THREE.MeshBasicMaterial({color:0x54d6ff,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,fog:false,depthWrite:false}));
@@ -208,6 +211,11 @@ export function createWorld(canvas,initialTheme){
   lmFrom.rotation.x=-Math.PI/2;lmFrom.position.y=TOP_Y+.014;lmFrom.visible=false;scene.add(lmFrom);
   const lmTo=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshBasicMaterial({map:outlineTexture('rgba(255,215,94,.95)'),transparent:true,opacity:.85,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
   lmTo.rotation.x=-Math.PI/2;lmTo.position.y=TOP_Y+.016;lmTo.visible=false;scene.add(lmTo);
+
+  /* seat-placement ghost ring */
+  const ghostMat=new THREE.MeshBasicMaterial({color:0x5fe08a,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false,fog:false,side:THREE.DoubleSide});
+  const seatGhost=new THREE.Mesh(new THREE.RingGeometry(.72,1.12,40),ghostMat);
+  seatGhost.rotation.x=-Math.PI/2;seatGhost.position.y=TOP_Y+.02;seatGhost.visible=false;scene.add(seatGhost);
 
   /* dedicated board light for readability */
   const boardLight=new THREE.SpotLight(0xfff2d8,2.2,30,.6,.65,1);
@@ -291,10 +299,10 @@ export function createWorld(canvas,initialTheme){
   fall1.position.set(wx,-4.9,wz);
   const fall2=fall1.clone();
   fall2.rotation.y=Math.PI/2.4;
-  scene.add(fall1,fall2);
+  islandGroup.add(fall1,fall2);
   const spring=new THREE.Mesh(new THREE.CircleGeometry(.9,24),new THREE.MeshBasicMaterial({color:0x9fe6ff,transparent:true,opacity:.8,blending:THREE.AdditiveBlending,fog:false,depthWrite:false}));
   spring.rotation.x=-Math.PI/2;spring.position.set(wx,.06,wz-.5);
-  scene.add(spring);
+  islandGroup.add(spring);
 
   const splashN=110;
   const splashPos=new Float32Array(splashN*3),splashVel=new Float32Array(splashN*3),splashLife=new Float32Array(splashN);
@@ -311,7 +319,7 @@ export function createWorld(canvas,initialTheme){
   const splashGeo=new THREE.BufferGeometry();
   splashGeo.setAttribute('position',new THREE.Float32BufferAttribute(splashPos,3));
   const splash=new THREE.Points(splashGeo,new THREE.PointsMaterial({map:glowTex,color:0xbfe9ff,size:.28,transparent:true,opacity:.75,depthWrite:false,fog:false,blending:THREE.AdditiveBlending}));
-  scene.add(splash);
+  islandGroup.add(splash);
 
   /* clouds */
   const cloudTex=radialTexture('rgba(210,190,255,.8)','rgba(210,190,255,0)');
@@ -333,7 +341,7 @@ export function createWorld(canvas,initialTheme){
     const m=new THREE.Mesh(new THREE.IcosahedronGeometry(.3+Math.random()*.55,0),rockM);
     const o={m,a:Math.random()*Math.PI*2,r:11+Math.random()*7,y:1+Math.random()*6,spd:.05+Math.random()*.12,bob:.4+Math.random()*.8,ph:Math.random()*6};
     rocks.push(o);
-    scene.add(m);
+    islandGroup.add(m);
   }
 
   /* ambient particle FX (theme driven) */
@@ -402,6 +410,16 @@ export function createWorld(canvas,initialTheme){
   const pieces=new Map();
   let lastBoard=null;
   let selection=null;
+  let fog=null; // {view:SIZE×SIZE bool, viewer:color} or null
+
+  function refreshFog(){
+    for(const[,g]of pieces){
+      if(!fog){g.visible=true;continue;}
+      const[r,c]=g.userData.sq;
+      const hidden=g.userData.color!==fog.viewer&&!(fog.view[r]&&fog.view[r][c]);
+      g.visible=!hidden;
+    }
+  }
 
   const selectRing=new THREE.Mesh(new THREE.RingGeometry(.4,.54,32),new THREE.MeshBasicMaterial({color:0xffd76a,transparent:true,opacity:.9,side:THREE.DoubleSide,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
   selectRing.rotation.x=-Math.PI/2;selectRing.visible=false;
@@ -481,6 +499,7 @@ export function createWorld(canvas,initialTheme){
         if(p.king&&!mesh.userData.king){addCrown(mesh);burst(sq3(sq,.5),0xffd75e,18,.8);}
       }
     }
+    refreshFog();
   }
 
   function removeCaptured(sq){
@@ -509,6 +528,7 @@ export function createWorld(canvas,initialTheme){
         if(i>=move.path.length){
           mesh.userData.sq=[...move.path[i-1]];
           pieces.set(sqKey(move.path[i-1]),mesh);
+          refreshFog();
           resolve();
           return;
         }
@@ -572,6 +592,25 @@ export function createWorld(canvas,initialTheme){
     return null;
   }
 
+  const _plane=new THREE.Plane(new THREE.Vector3(0,1,0),-TOP_Y);
+  const _hit=new THREE.Vector3();
+  function toPtr(cx,cy){
+    const rect=canvas.getBoundingClientRect();
+    ptr.x=((cx-rect.left)/rect.width)*2-1;
+    ptr.y=-((cy-rect.top)/rect.height)*2+1;
+    raycaster.setFromCamera(ptr,camera);
+  }
+  function groundAt(cx,cy){
+    toPtr(cx,cy);
+    if(raycaster.ray.intersectPlane(_plane,_hit))return{x:_hit.x,z:_hit.z};
+    return null;
+  }
+  function rayHitsRoot(cx,cy,root){
+    if(!root)return false;
+    toPtr(cx,cy);
+    return raycaster.intersectObject(root,true).length>0;
+  }
+
   canvas.addEventListener('pointermove',ev=>{
     if(inspect){inspectMove(ev);return;}
     const sq=pick(ev);
@@ -615,17 +654,17 @@ export function createWorld(canvas,initialTheme){
   let lastFit=0;
   function fitView(){
     const tanV=Math.tan(camera.fov*Math.PI/360);
-    const fitV=5.4/tanV;
-    const fitH=6.4/(tanV*Math.max(camera.aspect,.35));
-    const fit=Math.max(fitV,fitH);
-    if(lastFit>0){
-      const d=THREE.MathUtils.clamp(
-        camera.position.distanceTo(controls.target)*fit/lastFit,
-        controls.minDistance,controls.maxDistance);
-      const dir=camera.position.clone().sub(controls.target).normalize();
-      camera.position.copy(controls.target).addScaledVector(dir,d);
-      controls.update();
-    }
+    const m=1.1;
+    const fitV=(6.4*m)/tanV;
+    const fitH=(8.0*m)/(tanV*Math.max(camera.aspect,.4));
+    const fit=Math.max(fitV,fitH,controls.minDistance);
+    if(controls.maxDistance<fit)controls.maxDistance=fit+2;
+    let dir=camera.position.clone().sub(controls.target);
+    if(dir.lengthSq()<1e-6)dir.set(0,9.7,14);
+    dir.normalize();
+    controls.target.set(0,0,0);
+    camera.position.copy(controls.target).addScaledVector(dir,fit);
+    controls.update();
     lastFit=fit;
   }
   function resize(){
@@ -690,6 +729,12 @@ export function createWorld(canvas,initialTheme){
     makeFX(T.fx);
     lightning=!!T.lightning;
     setEnvDecor(T.env||'classic');
+    domeMat.color.setHex(T.rock);
+    setForm(T.form||'island');
+    const enclosed=T.form==='cavern';
+    stars.visible=!enclosed;
+    moon.visible=moonCore.visible=!enclosed;
+    for(const cl of clouds)cl.visible=!enclosed&&T.cloud[1]>.02;
     if(envNook)setEnvironmentClock();
     if(boardSetId!=='island')applyBoardSet(boardSetId);
     return curTheme;
@@ -1001,12 +1046,87 @@ export function createWorld(canvas,initialTheme){
     return g;
   }
 
+  /* ---------------- world FORMS — the ground & structure the board rests on.
+     Each form is a different silhouette/material story, so choosing a world with
+     a new form genuinely rebuilds the ground & surroundings, not just its paint.
+     Builders reuse the theme-shared materials (rock/grass/plat/frame/leaf) so a
+     form recolours automatically whenever the palette changes. ---------------- */
+  const formGroups={};
+  const std=(c,r,h,seg=48)=>new THREE.Mesh(new THREE.CylinderGeometry(r,r*0.98,h,seg),c);
+  const FORM_BUILDERS={
+    plain(){
+      const g=new THREE.Group();
+      const ground=std(platMat,60,1.2);ground.position.y=-.66;ground.receiveShadow=true;g.add(ground);
+      const lip=new THREE.Mesh(new THREE.TorusGeometry(4.7,.08,8,64),frameMat);lip.rotation.x=Math.PI/2;lip.position.y=.05;g.add(lip);
+      for(let i=0;i<7;i++){const a=i/7*Math.PI*2+.5;const s=new THREE.Mesh(new THREE.BoxGeometry(.5,3+((i*53)%9)*.4,.5),rockMat);s.position.set(Math.cos(a)*17,s.geometry.parameters.height/2-.2,Math.sin(a)*17);s.rotation.y=a;g.add(s);}
+      return g;
+    },
+    crater(){
+      const g=new THREE.Group();
+      const floor=std(platMat,7.4,.9);floor.position.y=-.5;floor.receiveShadow=true;g.add(floor);
+      const rim=new THREE.Mesh(new THREE.TorusGeometry(8.2,2.4,10,40),rockMat);rim.rotation.x=Math.PI/2;rim.position.y=-.2;rim.receiveShadow=true;g.add(rim);
+      const inner=new THREE.Mesh(new THREE.CylinderGeometry(7.5,8.4,3.2,40,1,true),rockMat);inner.position.y=-1.4;g.add(inner);
+      for(let i=0;i<14;i++){const a=i/14*Math.PI*2;const s=new THREE.Mesh(new THREE.ConeGeometry(.35,1.4+((i*37)%7)*.3,5),rockMat);s.position.set(Math.cos(a)*8.6,.4,sinZ(a,8.6));g.add(s);}
+      const glow=new THREE.Mesh(new THREE.RingGeometry(5.6,7.1,48),new THREE.MeshBasicMaterial({color:0xff6a2a,transparent:true,opacity:.35,blending:THREE.AdditiveBlending,depthWrite:false,fog:false,side:THREE.DoubleSide}));glow.rotation.x=-Math.PI/2;glow.position.y=.03;g.add(glow);
+      envAnims.push((t)=>{if(g.visible)glow.material.opacity=.28+.12*Math.sin(t*1.7);});
+      return g;
+    },
+    reef(){
+      const g=new THREE.Group();
+      const sand=std(platMat,10,1);sand.position.y=-.55;sand.receiveShadow=true;g.add(sand);
+      for(let i=0;i<16;i++){const a=Math.random()*Math.PI*2,r=6+Math.random()*3.5;const col=leafMat;const c=new THREE.Mesh(new THREE.ConeGeometry(.25+Math.random()*.3,1+Math.random()*1.6,7),col);c.position.set(Math.cos(a)*r,.4+Math.random()*.4,sinZ(a,r));c.rotation.z=(Math.random()-.5)*.3;g.add(c);}
+      return g;
+    },
+    orbit(){
+      const g=new THREE.Group();
+      const deck=new THREE.Mesh(new THREE.CylinderGeometry(6.1,5.4,.6,6),platMat);deck.position.y=-.34;deck.receiveShadow=true;g.add(deck);
+      const ring=new THREE.Mesh(new THREE.TorusGeometry(9.4,.28,8,6),frameMat);ring.rotation.x=Math.PI/2;ring.position.y=-.2;g.add(ring);
+      const debris=[];
+      for(let i=0;i<10;i++){const m=new THREE.Mesh(new THREE.BoxGeometry(.3,.5,.3),rockMat);const o={m,a:Math.random()*6.28,r:10+Math.random()*4,y:1+Math.random()*5,spd:.08+Math.random()*.12};debris.push(o);g.add(m);}
+      envAnims.push((t,dt)=>{if(g.visible){for(const o of debris){o.a+=dt*o.spd;o.m.position.set(Math.cos(o.a)*o.r,o.y,Math.sin(o.a)*o.r);o.m.rotation.y+=dt*.6;}g.rotation.y+=dt*.01;}});
+      return g;
+    },
+    hall(){
+      const g=new THREE.Group();
+      const plinth=new THREE.Mesh(new THREE.BoxGeometry(13,1,13),platMat);plinth.position.y=-.54;plinth.receiveShadow=true;g.add(plinth);
+      const step=new THREE.Mesh(new THREE.BoxGeometry(15,.5,15),rockMat);step.position.y=-1.05;step.receiveShadow=true;g.add(step);
+      for(let i=0;i<8;i++){const a=i/8*Math.PI*2+.4;const c=new THREE.Mesh(new THREE.CylinderGeometry(.42,.5,5.5,12),rockMat);c.position.set(Math.cos(a)*9.2,2.4,sinZ(a,9.2));c.castShadow=true;g.add(c);}
+      return g;
+    },
+    cavern(){
+      const g=new THREE.Group();
+      const dome=new THREE.Mesh(new THREE.SphereGeometry(34,24,16,0,Math.PI*2,0,Math.PI*.6),domeMat);dome.position.y=-2;g.add(dome);
+      const floor=std(platMat,16,1.4);floor.position.y=-.72;floor.receiveShadow=true;g.add(floor);
+      for(let i=0;i<16;i++){const a=Math.random()*Math.PI*2,r=5+Math.random()*16;const s=new THREE.Mesh(new THREE.ConeGeometry(.4,1.4+Math.random()*3,6),rockMat);s.position.set(Math.cos(a)*r,10+Math.random()*4,sinZ(a,r));s.rotation.x=Math.PI;g.add(s);}
+      return g;
+    },
+    mesa(){
+      const g=new THREE.Group();
+      const layers=[[12,.8,rockMat],[9.4,.9,rockMat],[7.6,1,grassMat]];
+      let y=-.4;
+      for(const[r,h,m]of layers){const c=new THREE.Mesh(new THREE.CylinderGeometry(r,r*1.04,h,7),m);c.position.y=y-h/2;c.receiveShadow=true;g.add(c);y-=h*.5;}
+      const top=std(platMat,6.4,.5,7);top.position.y=.02;top.receiveShadow=true;g.add(top);
+      return g;
+    },
+  };
+  const sinZ=(a,r)=>Math.sin(a)*r;
+  function T0(){return THEMES[curTheme]||THEMES[DEFAULT_THEME];}
+  function setForm(style){
+    const key=style||'island';
+    islandGroup.visible=(key==='island');
+    for(const k in formGroups)formGroups[k].visible=(k===key);
+    if(key==='island')return;
+    if(!formGroups[key]&&FORM_BUILDERS[key]){formGroups[key]=FORM_BUILDERS[key]();scene.add(formGroups[key]);}
+    if(formGroups[key])formGroups[key].visible=true;
+  }
+
   applyTheme(initialTheme||DEFAULT_THEME);
 
   /* ---------------- loop ---------------- */
   const clock=new THREE.Clock();
   const frameCbs=[];
-  let time=0,shakeAmt=0;
+   let time=0,shakeAmt=0;
+   let followPt=null;
 
   function loop(){
     requestAnimationFrame(loop);
@@ -1017,6 +1137,11 @@ export function createWorld(canvas,initialTheme){
     stepTweens(dt);
     if(envClock)envClock.update(dt);
     for(const fn of envAnims)fn(time,dt);
+    if(followPt){
+      const k=1-Math.exp(-dt*2.6);
+      controls.target.x+=(followPt.x-controls.target.x)*k;
+      controls.target.z+=(followPt.z-controls.target.z)*k;
+    }
     controls.update();
 
     stars.rotation.y+=dt*.004;
@@ -1094,21 +1219,30 @@ export function createWorld(canvas,initialTheme){
   }
   loop();
 
+  function refreshPieces(){
+    for(const[,mesh]of pieces)killPieceMesh(mesh);
+    pieces.clear();
+    if(lastBoard)syncBoard(lastBoard,false);
+  }
+
   return {
     onPick(cb){pickCb=cb;},
     onHover(cb){hoverCb=cb;},
     onFrame(cb){frameCbs.push(cb);},
     addObject(o){scene.add(o);},
+    followTo(x,z){const r=Math.hypot(x,z),max=2.2;const s=r>max?max/r:1;followPt={x:x*s,z:z*s};},
+    followOff(){followPt=null;},
+    refit(){fitView();},
     reactBurst(hex){
       burst(new THREE.Vector3((Math.random()-.5)*4,1,(Math.random()-.5)*4),hex,18,1.1);
     },
     reskin(key,params){
       if(params&&params.transmissive)setEnv(getGlassEnv());
       setSkin(key,params);
-      for(const[,mesh]of pieces)killPieceMesh(mesh);
-      pieces.clear();
-      if(lastBoard)syncBoard(lastBoard,false);
+      refreshPieces();
     },
+    reshape(id){setShape(id);refreshPieces();},
+    army(pal){setArmyColors(pal);refreshPieces();},
     victoryDance(color,kind){
       const meshes=[];
       for(const[,m]of pieces)if(m.userData.color===color)meshes.push(m);
@@ -1140,16 +1274,23 @@ export function createWorld(canvas,initialTheme){
     onClockStrike(cb){strikeCb=cb;if(envClock)envClock.onStrike=cb;},
     onInspectChange(cb){inspectOpenCb=cb;},
     removeObject(o){scene.remove(o);},
+    groundAt(cx,cy){return groundAt(cx,cy);},
+    rayHitsRoot(cx,cy,root){return rayHitsRoot(cx,cy,root);},
+    showGhost(x,z,valid){seatGhost.visible=true;seatGhost.position.set(x,TOP_Y+.02,z);ghostMat.color.setHex(valid?0x5fe08a:0xe0605f);},
+    hideGhost(){seatGhost.visible=false;},
     makeGroup(x=0,y=0,z=0){const g=new THREE.Group();g.position.set(x,y,z);scene.add(g);return g;},
     sqToVec(sq,y){return sq3(sq,y===undefined?TOP_Y:y);},
     burstVec(v,color,n){burst(v,color,n||18,1);},
     shake(m){shakeAmt=Math.max(shakeAmt,m);},
     showLastMove(mv){
       if(!mv){lmFrom.visible=lmTo.visible=false;return;}
-      lmFrom.visible=true;lmTo.visible=true;
+      const hid=sq=>fog&&!(fog.view[sq[0]]&&fog.view[sq[0]][sq[1]]);
+      lmFrom.visible=!hid(mv.from);
+      lmTo.visible=!hid(mv.path[mv.path.length-1]);
       lmFrom.position.copy(sq3(mv.from,TOP_Y+.014));
       lmTo.position.copy(sq3(mv.path[mv.path.length-1],TOP_Y+.016));
     },
+    setFog(view,viewer){fog=view?{view,viewer}:null;refreshFog();},
     syncBoard,
     animateMove,
     removeCaptured,

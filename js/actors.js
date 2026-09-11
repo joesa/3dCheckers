@@ -18,22 +18,29 @@ const shift=(c,dh,ds,dl)=>{
     THREE.MathUtils.clamp(hsl.l+dl,0,1));
 };
 
-export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='default'){
+export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='default',look=null){
   const rng=mulberry32(seed);
   const C=TEAM_COLORS[color];
   const group=new THREE.Group();
   const rigG=new THREE.Group();
   rigG.rotation.y=facing;
   group.add(rigG);
+  const person=new THREE.Group();
+  rigG.add(person);
 
-  const robeMat=new THREE.MeshStandardMaterial({color:shift(C.dark,(rng()-.5)*.1,(rng()-.5)*.2,(rng()-.5)*.12),roughness:.55,metalness:.15});
-  const trimMat=new THREE.MeshStandardMaterial({color:C.body,roughness:.35,metalness:.4,emissive:C.glow,emissiveIntensity:.45});
+  const robeColor=shift(C.dark,(rng()-.5)*.1,(rng()-.5)*.2,(rng()-.5)*.12);
+  const fin=(look&&look.finish)||{};
+  const glow=(look&&look.glow)||1;
+  const robeMat=new THREE.MeshStandardMaterial({color:(look&&look.tint)?new THREE.Color(look.tint):robeColor,roughness:fin.roughness!=null?fin.roughness:.55,metalness:fin.metalness!=null?fin.metalness:.15});
+  if(fin.emissive){robeMat.emissive.copy(robeMat.color);robeMat.emissiveIntensity=fin.emissive;}
+  const trimMat=new THREE.MeshStandardMaterial({color:C.body,roughness:.35,metalness:.4,emissive:C.glow,emissiveIntensity:.45*glow});
   const woodMat=new THREE.MeshStandardMaterial({color:shift(0x5b4330,(rng()-.5)*.04,0,(rng()-.5)*.1),roughness:.78});
   if(throne==='stone'){woodMat.color.setHex(0x8f9299);woodMat.roughness=.92;woodMat.metalness=.05;}
   else if(throne==='iron'){woodMat.color.setHex(0x40454e);woodMat.roughness=.3;woodMat.metalness=.92;}
   else if(throne==='gilded'){woodMat.color.setHex(0xd8ab4a);woodMat.roughness=.28;woodMat.metalness=.8;woodMat.emissive.setHex(0x2e2206);woodMat.emissiveIntensity=.35;}
-  const skinCol=SKINS[rng()*SKINS.length|0];
-  const hairCol=HAIRS[rng()*HAIRS.length|0];
+  const rs=rng(),rh=rng();
+  const skinCol=(look&&look.skin!=null)?SKINS[look.skin%SKINS.length]:SKINS[rs*SKINS.length|0];
+  const hairCol=(look&&look.hair!=null)?HAIRS[look.hair%HAIRS.length]:HAIRS[rh*HAIRS.length|0];
 
   /* throne */
   const chair=new THREE.Group();
@@ -72,7 +79,7 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
   robe.position.y=lift+robH/2-.02;robe.castShadow=true;
   const collar=new THREE.Mesh(new THREE.TorusGeometry(robR*.42,.065,10,20),trimMat);
   collar.rotation.x=Math.PI/2;collar.position.y=lift+robH-.26;
-  rigG.add(robe,collar);
+  person.add(robe,collar);
 
   const head=new THREE.Group();
   const face=new THREE.Mesh(new THREE.SphereGeometry(.24,18,14),new THREE.MeshStandardMaterial({color:skinCol,roughness:.85}));
@@ -82,7 +89,8 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
   const eR=eL.clone();eR.position.x=.085;
   head.add(face,eL,eR);
   const hairMat=new THREE.MeshStandardMaterial({color:hairCol,roughness:.9});
-  const design=rng()*6|0;
+  const rd=rng();
+  const design=(look&&look.design!=null)?look.design:(rd*6|0);
   if(design===0){
     const hood=new THREE.Mesh(new THREE.SphereGeometry(.3,16,12),robeMat);
     hood.scale.set(1,.95,1);hood.position.set(0,.05,-.07);hood.castShadow=true;
@@ -124,14 +132,14 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
     head.add(cap,brim);
   }
   head.position.y=lift+robH+.1;
-  rigG.add(head);
+  person.add(head);
 
   const shoulderY=Math.min(1.5,lift+robH-.42);
   function makeArm(sx){
     const a={};
     a.shoulder=new THREE.Object3D();
     a.shoulder.position.set(sx,shoulderY,.08);
-    rigG.add(a.shoulder);
+    person.add(a.shoulder);
     a.sleeve=new THREE.Mesh(new THREE.CylinderGeometry(.07,.16,1,8),robeMat);
     a.sleeve.position.y=.5;
     a.shoulder.add(a.sleeve);
@@ -148,7 +156,7 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
       a.hand.add(f);
       a.fingers.push(f);
     }
-    rigG.add(a.hand);
+    person.add(a.hand);
     a.rest=new THREE.Vector3(sx*.75,shoulderY-.5,.6);
     a.target=a.rest.clone();
     a.cur=a.rest.clone();
@@ -163,11 +171,14 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
   const headBaseY=head.position.y;
   let t=rng()*10;
   let emote=null;
+  let walk=0;
+  let stand=0;
+  const STAND_Y=-lift;
 
   function toLocal(v){
-    rigG.updateWorldMatrix(true,false);
+    person.updateWorldMatrix(true,false);
     scratch.set(v.x,v.y,v.z);
-    return rigG.worldToLocal(scratch);
+    return person.worldToLocal(scratch);
   }
 
   const EMOTES={
@@ -209,6 +220,18 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
   function update(dt){
     t+=dt;
     if(!emote)robe.scale.y=1+Math.sin(t*1.8)*.02;
+    person.position.y=STAND_Y*stand+(walk>0?Math.sin(t*9)*.06*walk:0);
+    if(walk>0){
+      person.rotation.x=.06*walk;
+      person.rotation.z=Math.sin(t*4.5)*.05*walk;
+      if(!emote){
+        const sw=Math.sin(t*9);
+        hand.target.set(hand.rest.x,hand.rest.y+.06,hand.rest.z+sw*.42*walk);
+        offArm.target.set(offArm.rest.x,offArm.rest.y+.06,offArm.rest.z-sw*.42*walk);
+      }
+    }else if(person.rotation.x||person.rotation.z){
+      person.rotation.x=0;person.rotation.z=0;
+    }
     focus.lerp(focusTarget,1-Math.pow(.01,dt));
     head.lookAt(focus);
     for(const a of[hand,offArm]){
@@ -238,7 +261,7 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
     follow(v){hand.target.copy(toLocal(v));},
     grab(){hand.grip=1;},
     release(){hand.grip=.7;hand.target.copy(hand.rest);},
-    rest(){hand.target.copy(hand.rest);},
+    rest(){hand.target.copy(hand.rest);offArm.target.copy(offArm.rest);},
     focusOn(v){focusTarget.copy(v);},
     handWorld(){return hand.hand.getWorldPosition(new THREE.Vector3());},
     emote(name){
@@ -248,7 +271,13 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
       return true;
     },
   };
-  return {group,update,rig};
+  return {
+    group,person,chair,facing,
+    setStand(v){stand=THREE.MathUtils.clamp(v,0,1);},
+    setWalk(a){walk=THREE.MathUtils.clamp(a,0,1);if(walk<=0)rig.rest();},
+    setHeading(r){rigG.rotation.y=r;},
+    update,rig,
+  };
 }
 
 const angDiff=(a,b)=>Math.abs(Math.atan2(Math.sin(a-b),Math.cos(a-b)));
@@ -390,4 +419,31 @@ export function makeCrowd(seed=Math.random()*1e9|0){
     }
   }
   return {group,react,celebrate,update};
+}
+
+export function makeNameTag(text,accent){
+  text=(text==null?'':String(text)).slice(0,20);
+  const c=document.createElement('canvas');
+  const g=c.getContext('2d');
+  const font='bold 46px system-ui,Segoe UI,Roboto,Arial,sans-serif';
+  g.font=font;
+  const padX=20,padY=14;
+  const w=Math.max(70,Math.ceil(g.measureText(text||'?').width)+padX*2);
+  const h=76;
+  c.width=w;c.height=h;
+  const g2=c.getContext('2d');
+  g2.clearRect(0,0,w,h);
+  g2.fillStyle='rgba(9,11,20,.72)';
+  if(g2.roundRect){g2.beginPath();g2.roundRect(2,2,w-4,h-4,16);g2.fill();
+    g2.lineWidth=3;g2.strokeStyle=accent||'rgba(255,214,120,.85)';g2.beginPath();g2.roundRect(2,2,w-4,h-4,16);g2.stroke();}
+  else{g2.fillRect(2,2,w-4,h-4);}
+  g2.font=font;g2.fillStyle='#ffe6ab';g2.textAlign='center';g2.textBaseline='middle';
+  g2.fillText(text,w/2,h/2+2);
+  const tex=new THREE.CanvasTexture(c);
+  tex.anisotropy=4;
+  const spr=new THREE.Sprite(new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false,depthWrite:false}));
+  const sc=0.0062;
+  spr.scale.set(w*sc,h*sc,1);
+  spr.renderOrder=999;
+  return spr;
 }
