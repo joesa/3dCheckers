@@ -15,7 +15,7 @@ import * as ECO from './economy.js';
 import {SKINS,THRONES,VICTORIES,THEMEPACKS,CLOCKS,AVATARS,SHAPES,PALETTES,getEquip,setEquip,unlocked,pieceSkinParams,allCatalog,avatarLook,armyPalette} from './cosmetics.js';
 import {Auth,signUp as authSignUp,signIn as authSignIn,signOut as authSignOut,reportMatch as authReportMatch,ladder as authLadder,onAuthChange,onAssetsChange,flushAssets} from './auth.js';
 import * as RET from './retention.js';
-import {SRV,srvInit,srvReconnect,corrCreate,corrJoin,corrDecline,corrResign,corrPost,corrList,corrGame,findHandle,follow,unfollow,rivals,corrStandings,corrQuickest,corrLongest,ladderWinrate,pushRegister,pushUnregister,duelOpen,duelAccept,duelAttest,stakeBalance,stakeClaimDaily,duelsOpen,betPools,betMine,betPlace,watchHeartbeat,watchRoster,watchLeave,createInvite,getInvite,patchInvite,pushMove,getMoves,getReactions,react as srvReact,newCode as srvNewCode} from './srv.js';
+import {SRV,srvInit,srvReconnect,corrCreate,corrJoin,corrDecline,corrResign,corrPost,corrList,corrGame,findHandle,follow,unfollow,rivals,corrStandings,corrQuickest,corrLongest,ladderWinrate,pushRegister,pushUnregister,duelOpen,duelAccept,duelAttest,stakeBalance,stakeClaimDaily,duelsOpen,betPools,betMine,betPlace,watchHeartbeat,watchRoster,watchLeave,createInvite,getInvite,patchInvite,roomOpen,roomList,roomClaim,roomTouch,roomReset,roomClose,pushMove,getMoves,getReactions,react as srvReact,newCode as srvNewCode} from './srv.js';
 import {corrState} from './corr.js';
 import {CONFIG} from './config.js';
 import {addTween} from './tween.js';
@@ -38,8 +38,9 @@ function refreshNames(){
   else if(G.myColor){
     rn[G.myColor]=MYHANDLE||TEAM_NAME[G.myColor];
     const o=G.myColor===GAME.RED?'black':'red';
-    rn[o]=OPPNAME||TEAM_NAME[o];
-  }else if(G.mode==='ai'){rn.black='Storm';}
+    if(OPPNAME)rn[o]=OPPNAME;
+    else if(G.mode==='ai')rn[o]=G.qk?'QuantKing':(G.persona&&G.persona.name)||'Storm';
+  }else if(G.mode==='ai'){rn.black=G.qk?'QuantKing':(G.persona&&G.persona.name)||'Storm';}
   G.dispName=rn;
   const short=s=>String(s).length>8?String(s).slice(0,7)+'…':String(s);
   const rl=document.querySelector('.ember-l'),fl=document.querySelector('.frost-l');
@@ -378,6 +379,18 @@ function endGame(winnerColor,resigned){
       if(r&&r.data!=null&&r.elo!=null)toast('Ladder: '+r.elo+' \u2192 '+r.data+' elo','good');
     });
   }
+  if(G.roomCode){
+    roomClose(G.roomCode);
+    clearInterval(G._roomBeat);G._roomBeat=null;
+    if(!signedIn()&&!G._guestSave){
+      G._guestSave=true;
+      setTimeout(async()=>{
+        const yes=await confirmBox('Keep your legacy?',
+          'You sat in as guest '+MYNAME+'. Create a free account to keep your points, coins, chosen world and settings — every duel from now on is saved to you.');
+        if(yes)openAuth();
+      },1100);
+    }
+  }
   scheduleFogReplay();
 }
 
@@ -437,7 +450,7 @@ function resetMatch(){
 /* ================= picking ================= */
 
 world.onPick(sq=>{
-  if(!G.started||G.busy||G.over||!G.state)return;
+  if(!G.started||G.busy||G.over||G.waiting||!G.state)return;
   if(G.myColor&&G.state.turn!==G.myColor)return;
   if(G.selected){
     const mv=G.moves.find(m=>
@@ -480,8 +493,10 @@ function onMessage(m){
         G.transport.send({t:'hello'});
         G.transport.send({t:'seed',seed:SEED});
         G.transport.send({t:'start',state:G.state,theme:roomTheme,clock:G.clockId});
-        enterMatch();
+        if(G.started){G.waiting=false;armTurn();show($('#mode-banner'),false);updateHUD();}
+        else enterMatch();
         sfx.join();
+        toast(G.roomCode?'Your challenger has taken the seat':'Opponent connected','good');
       }
       break;
     case 'seed':
@@ -499,6 +514,7 @@ function onMessage(m){
         G.clock=new Clocks(G.clockId);
         G.clockInited=false;
         enterMatch();
+        if(G.roomCode){clearInterval(G._roomPoll);G._roomPoll=null;showModeBanner('ROOM '+G.roomCode);}
         applyState(m.state);
         sfx.join();
       }
@@ -741,6 +757,7 @@ function runWalkIn(){
 
 function enterMatch(){
   G.started=true;
+  if(G.clockId)lsSet('ad-clock',G.clockId);   // remember the last time control the user sat under
   show($('#menu'),false);
   show($('#hud'),true);
   show($('#chat'),isOnline());
@@ -818,7 +835,7 @@ function localLobby(){
     const code=($('#lc-code').value.trim().toUpperCase())||newCode();
     $('#lc-code').value=code;
     roomTheme=$('#lb-theme').value;
-    world.setTheme(roomTheme);
+    world.setTheme(roomTheme);lsSet('ad-theme',roomTheme);
     G.clockId=$('#lb-tc').value;
     G.clock=new Clocks(G.clockId);
     G.clockInited=false;
@@ -901,7 +918,7 @@ function rtcLobby(){
   $('#rtc-create').onclick=async()=>{
     teardownNet();
     roomTheme=$('#rtc-theme').value||DEFAULT_THEME;
-    world.setTheme(roomTheme);
+    world.setTheme(roomTheme);lsSet('ad-theme',roomTheme);
     G.clockId=$('#rtc-tc').value;
     G.clock=new Clocks(G.clockId);
     G.clockInited=false;
@@ -950,7 +967,7 @@ function rtcLobby(){
     if(!SRV.ok){toast('Link duels need the backend — start the ladder service');return;}
     teardownNet();
     roomTheme=$('#rtc-theme').value||DEFAULT_THEME;
-    world.setTheme(roomTheme);
+    world.setTheme(roomTheme);lsSet('ad-theme',roomTheme);
     G.clockId=$('#rtc-tc').value;
     G.clock=new Clocks(G.clockId);
     G.clockInited=false;
@@ -1032,6 +1049,10 @@ async function joinByCode(code){
 function teardownNet(){
   clearTimeout(G.aiTimer);
   presStop();
+  clearInterval(G._roomPoll);G._roomPoll=null;
+  clearInterval(G._roomBeat);G._roomBeat=null;
+  if(G.roomCode&&G.rtcWasHost)roomClose(G.roomCode);
+  G.roomCode=null;G.waiting=false;
   if(G.transport){try{G.transport.close();}catch(e){}}
   G.transport=null;G.mode=null;G.myColor=null;G.peerSeen=false;
   G.duelId=null;G._stakeWait=false;G.wagerN=0;
@@ -1043,10 +1064,186 @@ function teardownNet(){
   show($('#btn-watch'),false);
 }
 
+/* ================= open rooms — sit down, wait, play; no invite needed =================
+   Room rows live in ad_invites with kind='room' (open RLS — guests included).
+   Anyone can open a room and get seated; anyone can claim a free seat and duel;
+   anyone can slip into the stands and watch a duel in progress (the room code
+   doubles as the spectate stream). The lobby listing hearts the row, so a
+   vanished host's room ages out on its own. */
+
+function roomHeartbeat(){
+  clearInterval(G._roomBeat);
+  G._roomBeat=setInterval(()=>{if(G.roomCode)roomTouch(G.roomCode);},45000);
+}
+
+function roomWaitLoop(code,room){
+  clearInterval(G._roomPoll);
+  let waited=0;
+  G._roomPoll=setInterval(async()=>{
+    if(G.peerSeen||G.transport!==room){clearInterval(G._roomPoll);G._roomPoll=null;return;}
+    const row=await getInvite(code);
+    if(!row||row.status==='done'){clearInterval(G._roomPoll);G._roomPoll=null;return;}
+    if(row.answer){
+      clearInterval(G._roomPoll);G._roomPoll=null;
+      try{
+        await room.acceptAnswer(row.answer);
+        await patchInvite(code,{status:'playing'});
+      }catch(e){toast('The seat handshake failed','bad');}
+    }else if(row.status==='joined'){
+      waited+=1.2;
+      if(waited>25){waited=0;roomReset(code);}   // a claimant vanished before answering — re-open the seat
+    }
+  },1200);
+}
+
+async function roomHost(){
+  await srvInit();
+  if(!SRV.ok){toast('Open Rooms needs the backend','bad');return;}
+  if(G.started&&!G.over){toast('Finish your duel first','bad');return;}
+  openLobby(`
+    <h2>Host a Room</h2>
+    <p class="hint">You'll be seated at the island while your room is listed publicly. Any duelist browsing Open Rooms can take the other seat — no invite needed — and anyone can drop in to watch.</p>
+    <label>Room world (the table you both sit at)</label>
+    <select id="rm-theme"></select>
+    ${tcSelect('rm-tc')}
+    <div class="row"><button class="btn primary" id="rm-go">Sit &amp; Wait</button><button class="btn" id="rm-back">Back</button></div>`);
+  fillThemeSelect($('#rm-theme'),world.currentTheme());
+  $('#rm-back').onclick=()=>{sfx.click();roomsMenu();};
+  $('#rm-go').onclick=async()=>{
+    sfx.click();
+    teardownNet();
+    roomTheme=$('#rm-theme').value||DEFAULT_THEME;
+    world.setTheme(roomTheme);lsSet('ad-theme',roomTheme);
+    G.clockId=$('#rm-tc').value||'none';
+    G.clock=new Clocks(G.clockId);G.clockInited=false;
+    const res=await roomOpen({name:MYNAME,theme:roomTheme,clock:G.clockId});
+    if(!res.ok){toast('Could not open the room: '+(res.why||''),'bad');return;}
+    G.roomCode=res.code;
+    G.watchCode=res.code;   // the room code doubles as the spectate stream
+    const r=new RTCRoom(onMessage);
+    G.rtcWasHost=true;
+    G.transport=r;
+    G.mode='host';G.myColor=GAME.RED;
+    G.state=GAME.initialState();
+    G.waiting=true;
+    r.onOpen=()=>{
+      G.waiting=false;
+      G.transport.send({t:'who',uid:(SRV.me&&SRV.me.id)||null,name:MYNAME,handle:MYHANDLE});
+    };
+    show($('#lobby'),false);
+    enterMatch();
+    showModeBanner('ROOM '+res.code+' \u00B7 waiting for a challenger');
+    toast('Room '+res.code+' is open — duelists can enter from Open Rooms','good');
+    presStart(res.code,false);
+    roomHeartbeat();
+    try{
+      const offer=await r.host();
+      await patchInvite(res.code,{offer});
+      roomWaitLoop(res.code,r);
+    }catch(e){toast('Could not prepare the room: '+e.message,'bad');}
+  };
+}
+
+async function roomJoin(code){
+  await srvInit();
+  if(!SRV.ok){toast('Open Rooms needs the backend','bad');return;}
+  code=String(code||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!code){toast('Which room?','bad');return;}
+  teardownNet();
+  const row=await getInvite(code);
+  if(!row||row.kind!=='room'||row.status==='done'){toast('That room is gone','bad');return;}
+  if(row.status!=='open'){startSpectate(code);return;}   // seat taken or mid-duel — watch instead
+  if(!row.offer){toast('The room is still opening its gates\u2026 try again in a moment','bad');return;}
+  const claim=await roomClaim(code,{name:MYNAME,uid:SRV.me?SRV.me.id:null});
+  if(!claim){toast('Seat just taken \u2014 sliding into the stands','bad');startSpectate(code);return;}
+  SRV.oppUid=row.host_uid||null;
+  roomTheme=row.theme&&THEMES[row.theme]?row.theme:lsGet('ad-theme')||DEFAULT_THEME;
+  world.setTheme(roomTheme);
+  G.clockId=row.clock||'none';
+  G.clock=new Clocks(G.clockId);G.clockInited=false;
+  G.roomCode=code;G.watchCode=code;
+  openLobby('<h2>Room '+esc(code)+'</h2><div class="status"><span class="spinner"></span>Taking the seat\u2026</div><div class="status" id="rk-st"></div><div class="row"><button class="btn" id="rk-cancel">Back</button></div>');
+  $('#rk-cancel').onclick=()=>{sfx.click();roomReset(code);G.roomCode=null;corrClose();};
+  const st=t=>{const s=$('#rk-st');if(s)s.textContent=t;};
+  const r=new RTCRoom(onMessage);
+  G.rtcWasHost=false;
+  G.transport=r;
+  r.onOpen=()=>{
+    G.mode='guest';G.myColor=GAME.BLACK;
+    r.send({t:'hello'});
+    r.send({t:'who',uid:(SRV.me&&SRV.me.id)||null,name:MYNAME,handle:MYHANDLE});
+  };
+  r.onState=s2=>{
+    if(s2==='connecting')st('Negotiating link\u2026');
+    else if(s2==='connected')st('Link established \u2014 entering the duel\u2026');
+    else if(s2==='failed')st('Direct link failed \u2014 relaying through TURN\u2026');
+    else if(s2==='disconnected')st('Peer connection lost.');
+  };
+  try{
+    const ans=await r.acceptOffer(row.offer);
+    await patchInvite(code,{answer:ans,status:'playing'});
+    st('Seated \u2014 the duel begins when your host connects\u2026');
+    presStart(code,false);
+    roomHeartbeat();
+  }catch(e){
+    roomReset(code);G.roomCode=null;G.transport=null;
+    toast('Could not take the seat: '+e.message,'bad');
+    corrClose();
+  }
+}
+
+async function roomLink(code){
+  const row=await getInvite(code);
+  if(!row||row.kind!=='room'||row.status==='done'){toast('That room is gone','bad');return;}
+  if(row.status==='open')roomJoin(code);
+  else startSpectate(code);
+}
+
+async function roomsMenu(){
+  await srvInit();
+  openLobby('<h2>Open Rooms</h2><div class="status">Scanning the island for open tables\u2026</div>');
+  if(!SRV.ok){
+    $('#lobby').innerHTML='<h2>Open Rooms</h2><p class="hint">The backend is offline right now, and public rooms need it. Pass &amp; Play and Same-Browser Tabs keep working meanwhile.</p><div class="row"><button class="btn" id="rm-close">Close</button></div>';
+    $('#rm-close').onclick=()=>{sfx.click();corrClose();};
+    return;
+  }
+  renderRooms();
+  clearInterval(G._roomsPoll);
+  G._roomsPoll=setInterval(renderRooms,5000);
+}
+
+function roomCard(r){
+  const nm=r.status==='playing'
+    ?`<b>${esc(r.host_name||'?')}</b> <span class="corr-tag">vs</span> <b>${esc(r.guest_name||'?')}</b>`
+    :`<b>${esc(r.host_name||'?')}</b> <span class="corr-tag">seated &amp; waiting</span>`;
+  const th=r.theme&&THEMES[r.theme]?THEMES[r.theme].name:'\u2014';
+  const act=r.status==='open'
+    ?`<button class="btn small primary" data-rm="join" data-code="${esc(r.code)}">Take the Seat</button>`
+    :`<button class="btn small" data-rm="watch" data-code="${esc(r.code)}">Watch</button>`;
+  return `<div class="corr-row"><div class="corr-info">${nm}<span class="corr-tag">${esc(th)}</span></div><div class="corr-act">${act}</div></div>`;
+}
+
+async function renderRooms(){
+  const rows=await roomList();
+  const body=rows.length?rows.map(roomCard).join(''):'<div class="status">No open rooms right now \u2014 be the first to sit down.</div>';
+  $('#lobby').innerHTML=`<h2>Open Rooms</h2>
+    <p class="hint">Take any free seat and duel \u2014 no invite needed \u2014 or watch a duel unfold. Guests play under a temporary handle; after a game you can create an account to keep your points, worlds and settings.</p>
+    <div class="corr-list">${body}</div>
+    <div class="row"><button class="btn primary" id="rm-host">Host a Room</button><button class="btn" id="rm-close">Close</button></div>`;
+  for(const b of $('#lobby').querySelectorAll('[data-rm]'))b.onclick=()=>{
+    sfx.click();clearInterval(G._roomsPoll);G._roomsPoll=null;
+    if(b.dataset.rm==='join')roomJoin(b.dataset.code);
+    else startSpectate(b.dataset.code);
+  };
+  $('#rm-host').onclick=()=>{sfx.click();clearInterval(G._roomsPoll);G._roomsPoll=null;roomHost();};
+  $('#rm-close').onclick=()=>{sfx.click();clearInterval(G._roomsPoll);G._roomsPoll=null;corrClose();};
+}
+
 function tcSelect(id,cur){
+  const def=cur||lsGet('ad-clock')||'none';
   let h='<label>Time control</label><select id="'+id+'">';
   for(const[k,c]of Object.entries(CONTROLS))
-    h+='<option value="'+k+'"'+(k===(cur||'none')?' selected':'')+'>'+c.name+'</option>';
+    h+='<option value="'+k+'"'+(k===def?' selected':'')+'>'+c.name+'</option>';
   return h+'</select>';
 }
 
@@ -1464,6 +1661,7 @@ $('#b-hotseat').onclick=()=>{sfx.click();hotseatLobby();};
 $('#b-ai').onclick=()=>{sfx.click();aiLobby();};
 $('#b-quant').onclick=()=>{sfx.click();quantLobby();};
 $('#b-online').onclick=()=>{sfx.click();rtcLobby();};
+$('#b-rooms').onclick=()=>{sfx.click();roomsMenu();};
 $('#b-local').onclick=()=>{sfx.click();localLobby();};
 $('#b-corr').onclick=()=>{sfx.click();corrMenu();};
 $('#b-howto').onclick=()=>{sfx.click();show($('#menu'),false);show($('#howto'),true);};
@@ -1576,6 +1774,7 @@ function armTurn(){
 
 world.onFrame(dt=>{
   if(!G.started||G.over||!G.state)return;
+  if(G.waiting)return;   // room host is seated; nobody to duel yet — hold every clock
   if(G.clock&&G.clock.on){
     if(!G.clockInited){G.clock.init();G.clockInited=true;}
     G.clock.side=G.state.turn;
@@ -1843,7 +2042,9 @@ async function openReplayModal(code,opts){
   const t=await askText('Watch a Replay','Paste a duel replay code to relive it on the island.','Replay code\u2026','Watch',code||'');
   if(!t)return;
   if(!parseCode(t)){toast('That is not a valid replay code','bad');return;}
-  if(!opts.keepResult)show($('#menu'),false);
+  // dock-only replay bar at the bottom — clear every center overlay so the board stays in view
+  show($('#menu'),false);
+  show($('#result'),false);
   openViewer(GAME,world,t,opts.onExit||(()=>location.reload()),{autoplay:true,noHud:!!opts.keepResult});
 }
 $('#b-replay-code').onclick=()=>{
@@ -1947,7 +2148,7 @@ function equip(tab,id){
   if(slot==='look')buildActors();
   if(slot==='shape')world.reshape(id);
   if(slot==='palette'){world.army(armyPalette());buildActors();}
-  if(slot==='theme')world.setTheme(id);
+  if(slot==='theme'){world.setTheme(id);lsSet('ad-theme',id);}
   if(slot==='board'||slot==='clock')refreshEnvLook();
   toast('Equipped','good');
   openShop();
@@ -1991,7 +2192,7 @@ $('#b-shop').onclick=()=>{sfx.click();openShop();};
 $('#btn-shop-hud').onclick=()=>{sfx.click();openShop();};
 $('#b-shop-close').onclick=()=>{sfx.click();show($('#shop'),false);if(!G.started)show($('#menu'),true);};
 $('#b-topup').onclick=async()=>{
-  const t=await askText('Coin Top-up','Sandbox purchase — enter an amount (1000 coins ≈ $4.99).','1000','Buy');
+  const t=await askText('Coin Top-up','Sandbox purchase — enter an amount (1000 coins ≈ $4.99).','1000','Buy','1000');
   const n=parseInt(t,10);
   if(!(n>0))return;
   const usd=Math.max(.99,Math.round(n/2000*499)/100);
@@ -2064,6 +2265,7 @@ function openAuth(){
 }
 async function doSignOut(){
   await authSignOut();
+  MYNAME=ADJ[Math.random()*ADJ.length|0]+' '+NOUN[Math.random()*NOUN.length|0];   // back to a fresh one-time guest handle
   updateAuthUI();
   toast('Signed out','good');
 }
@@ -2115,6 +2317,13 @@ $('#b-bets').onclick=()=>{sfx.click();betsMenu('open');};
 $('#b-ladder-close').onclick=()=>{sfx.click();show($('#ladder'),false);if(!G.started)show($('#menu'),true);};
 
 /* ================= boot ================= */
+
+(function bootThemeMode(){
+  const m=lsGet('ad-theme-mode')||'dark';
+  document.documentElement.setAttribute('data-theme',m);
+  const b=$('#btn-theme-mode');
+  if(b)b.textContent=m==='dark'?'🌗':'☀';
+})();
 
 G.state=GAME.initialState();
 renderBoard(true);
@@ -2208,11 +2417,12 @@ setInterval(async()=>{
 
 async function startSpectate(code){
   const row=await getInvite(code);
-  if(!row||row.kind!=='spectate'){toast('No spectator pass at that link','bad');return;}
+  if(!row||(row.kind!=='spectate'&&row.kind!=='room')){toast('Nothing to watch at that link','bad');return;}
   teardownNet();
   G.mode='watch';G.myColor=null;G.started=true;G.over=false;
   G.watchCode=code;
-  G.watchNames={host:row.host_name||row.name||null,guest:null};
+  specSeq=0;specRx=0;
+  G.watchNames={host:row.host_name||row.name||null,guest:row.guest_name||null};
   refreshNames();
   world.setTheme(row.theme&&THEMES[row.theme]?row.theme:DEFAULT_THEME);
   G.state=GAME.initialState();
@@ -2271,9 +2481,10 @@ async function specPoll(){
 
 srvInit().then(()=>{
   const qs=new URLSearchParams(location.search);
-  const dq=qs.get('duel'),wq=qs.get('watch');
+  const dq=qs.get('duel'),wq=qs.get('watch'),rqq=qs.get('room');
   if(dq)joinByCode(dq.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,8));
   else if(wq)startSpectate(wq.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,9));
+  else if(rqq)roomLink(rqq.toUpperCase().replace(/[^A-Z0-9]/g,'').slice(0,9));
 });
 
 /* ================= timepiece ================= */
@@ -2490,7 +2701,7 @@ window.addEventListener('online',()=>{
   });
 });
 
-window.addEventListener('pagehide',()=>{flushAssets();});
+window.addEventListener('pagehide',()=>{flushAssets();if(G.roomCode)roomClose(G.roomCode);});
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden'){flushAssets();music.suspend();}else music.resume();});
 
 /* start ambient music on the first user gesture (autoplay policy) */

@@ -201,6 +201,46 @@ export async function patchInvite(code,patch){
   return error?{ok:false,why:error.message}:{ok:true};
 }
 
+/* ---------- open rooms: public lounges, no invite needed ----------
+   Rows live in ad_invites with kind='room'. Guests (anon) may create,
+   claim and watch — the RLS on ad_invites is already wide open. */
+
+export async function roomOpen(meta){
+  const code='R'+newCode(4);
+  const r=await createInvite('room',{...meta,code});
+  return r.ok?{ok:true,code}:r;
+}
+export async function roomList(){
+  if(!SRV.ok)return [];
+  const since=new Date(Date.now()-3*60000).toISOString();
+  const {data,error}=await sb.from('ad_invites')
+    .select('code,status,host_name,guest_name,theme,clock,created_at')
+    .eq('kind','room').in('status',['open','joined','playing'])
+    .gt('updated_at',since)
+    .order('created_at',{ascending:false}).limit(40);
+  return error?[]:(data||[]);
+}
+/* atomic seat claim — succeeds only if the seat is still free */
+export async function roomClaim(code,who){
+  if(!SRV.ok)return null;
+  const {data,error}=await sb.from('ad_invites')
+    .update({status:'joined',guest_uid:(who&&who.uid)||null,guest_name:(who&&who.name)||'?'})
+    .eq('code',code).eq('kind','room').eq('status','open').is('guest_uid',null)
+    .select('code');
+  if(error||!data||!data.length)return null;
+  return {ok:true};
+}
+export async function roomTouch(code){
+  if(!SRV.ok)return;
+  await sb.from('ad_invites').update({updated_at:new Date().toISOString()}).eq('code',code);
+}
+export async function roomReset(code){
+  return patchInvite(code,{status:'open',guest_uid:null,guest_name:null,answer:null});
+}
+export async function roomClose(code){
+  return patchInvite(code,{status:'done'});
+}
+
 /* ---------- spectate streams ---------- */
 
 export async function pushMove(code,seq,mover,move){

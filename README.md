@@ -2,7 +2,7 @@
 
 Multiplayer 3D checkers (English draughts) on a floating sky-island. Pure HTML/CSS/JS + [three.js](https://threejs.org). No build step. Plays fully offline/backend-free; an optional Supabase backend unlocks accounts, the ELO ladder, invite links, and spectating.
 
-**Modes:** Pass & Play · Play vs Storm (solo AI — four *personalities*: Squire Bran, Knight Errant Vessa, Warlock Mordaunt, Storm Monarch Kaal) · Online Duel (serverless WebRTC — copy-paste codes **or** one-click duel links with the backend) · Same-Browser Tabs · Daily Puzzle · Daily Gauntlet (5 escalating rounds with rule-bending modifiers) · Replay viewer (shareable duel codes) · Spectator passes (live watch + emoji reactions).
+**Modes:** Pass & Play · Play vs Storm (solo AI — four *personalities*: Squire Bran, Knight Errant Vessa, Warlock Mordaunt, Storm Monarch Kaal) · Online Duel (serverless WebRTC — copy-paste codes **or** one-click duel links with the backend) · Open Rooms (public lounges — sit at any table, no invite, or watch) · Same-Browser Tabs · Daily Puzzle · Daily Gauntlet (5 escalating rounds with rule-bending modifiers) · Replay viewer (shareable duel codes) · Spectator passes (live watch + emoji reactions).
 
 **Systems:** clocks (blitz/rapid/bullet with increments & flag-fall), cosmetics marketplace (piece finishes, thrones, victory dances, locked realm worlds), coin economy with a sandbox checkout (`PROVIDER` seam in `js/economy.js` — drop Stripe in there), Season battle pass (XP + free/premium tracks), coin **wagers** on online duels, emotes (keys 1–5, mirrored to the peer + crowd), and every player views the duel inside their own chosen world.
 
@@ -23,7 +23,7 @@ sudo scripts/lock-local-ports.sh       # sudo scripts/lock-local-ports.sh --off
 
 ## Optional backend (Supabase): accounts, ladder, links, spectating
 
-The game runs 100% without it — these features just hide themselves. With it you get: email-less handle+password accounts, an ELO ladder (K=32, atomic SQL RPC with replay-guarded match reporting), **duel links** (`?duel=CODE` — replaces the copy-paste SDP dance), **spectator passes** (`?watch=CODE` — live board + emoji reactions), all with graceful degradation.
+The game runs 100% without it — these features just hide themselves. With it you get: email-less handle+password accounts, an ELO ladder (K=32, atomic SQL RPC with replay-guarded match reporting), **duel links** (`?duel=CODE` — replaces the copy-paste SDP dance), **open rooms** (public lounges under `kind='room'` in `ad_invites` — anyone, guests included, can take a free seat and duel or drop in to watch — no invite needed; guests get a one-time random handle and are offered an account at game over), **spectator passes** (`?watch=CODE` — live board + emoji reactions), all with graceful degradation.
 
 1. Apply the migrations (tables `ad_profiles/ad_wallet/ad_equip/ad_matches/ad_invites/ad_moves/ad_reactions` + `ad_report_match` + the `ad_provision_user` trigger). `supabase/migrations/` is the source of truth; `supabase/schema.sql` is a generated concatenation of it, kept only for piping into a plain Postgres:
 
@@ -50,8 +50,9 @@ The game runs 100% without it — these features just hide themselves. With it y
 | handle, ELO, W/L | `ad_profiles` | cache |
 | coins, owned items, premium, battle-pass XP & claims | `ad_wallet` | `ad-wallet:<uid>` |
 | equipped skin / throne / board / clock / triumph | `ad_equip` | `ad-equip:<uid>` |
-| duel links, spectate streams | `ad_invites`, `ad_moves`, `ad_reactions` | — |
+| duel links, open rooms, spectate streams | `ad_invites` (incl. `kind='room'`), `ad_moves`, `ad_reactions` | — |
 | match history (seeded replay guard) | `ad_matches` | — |
+| chosen world/realm, light-vs-dark UI mode, last time control | — | `ad-theme`, `ad-theme-mode`, `ad-clock` |
 
 Signing in hydrates both rows and every write is mirrored back through a 1.2 s debounce, flushed on `pagehide`/`visibilitychange`. Signing out drops the cache back to an isolated guest bucket, so two accounts on one browser can no longer see each other's coins. Progress made while signed out lives in the unscoped `ad-wallet` and is adopted once by the next account created there.
 
