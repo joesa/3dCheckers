@@ -49,12 +49,14 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
   const back=new THREE.Mesh(box(1.25,1.5,.13),woodMat);back.position.set(0,.98,-.56);back.rotation.x=-.1;
   const cushion=new THREE.Mesh(box(1.05,.1,.92),trimMat);cushion.position.set(0,.49,.02);
   const backCush=new THREE.Mesh(box(1,.95,.08),trimMat);backCush.position.set(0,.92,-.49);
+  /* headrest pillow: the slumped pose rests the skull against this */
+  const headRest=new THREE.Mesh(box(.95,.3,.12),trimMat);headRest.position.set(0,1.5,-.48);
   const armL=new THREE.Mesh(box(.13,.11,.95),woodMat);armL.position.set(-.62,.78,-.02);
   const armR=new THREE.Mesh(box(.13,.11,.95),woodMat);armR.position.set(.62,.78,-.02);
   const postL=new THREE.Mesh(box(.1,.4,.1),woodMat);postL.position.set(-.62,.56,.35);
   const postR=new THREE.Mesh(box(.1,.4,.1),woodMat);postR.position.set(.62,.56,.35);
   const finial=new THREE.Mesh(new THREE.SphereGeometry(.1,12,10),trimMat);finial.position.set(0,1.74,-.58);
-  chair.add(seat,back,cushion,backCush,armL,armR,postL,postR,finial);
+  chair.add(seat,back,cushion,backCush,headRest,armL,armR,postL,postR,finial);
   for(let i=0;i<4;i++){
     const leg=new THREE.Mesh(box(.11,.38,.11),woodMat);
     leg.position.set(i%2?.52:-.52,.19,i<2?.48:-.48);
@@ -71,12 +73,15 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
   }
   rigG.add(chair);
 
-  /* body */
-  const robH=1.55+rng()*.4;
+  /* body — slouched deep into the seat: shorter seated torso + slight recline
+     so the skull settles onto the headrest pillow (y≈1.46, z≈-.46) instead of
+     hovering above the chair back. Also keeps shoulders below board height. */
+  const robH=.95+rng()*.18;
   const robR=.6+rng()*.22;
   const lift=.42;
   const robe=new THREE.Mesh(new THREE.ConeGeometry(robR,robH,16),robeMat);
   robe.position.y=lift+robH/2-.02;robe.castShadow=true;
+  robe.rotation.x=-.12;                       /* lean back into the chair */
   const collar=new THREE.Mesh(new THREE.TorusGeometry(robR*.42,.065,10,20),trimMat);
   collar.rotation.x=Math.PI/2;collar.position.y=lift+robH-.26;
   person.add(robe,collar);
@@ -131,7 +136,8 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
     brim.position.set(0,.13,.2);
     head.add(cap,brim);
   }
-  head.position.y=lift+robH+.1;
+  /* skull sinks into the headrest pillow: lower and tipped back against it */
+  head.position.set(0,lift+robH+.02,-.26);
   person.add(head);
 
   const shoulderY=Math.min(1.5,lift+robH-.42);
@@ -273,6 +279,8 @@ export function makeAvatar(color,facing=0,seed=Math.random()*1e9|0,throne='defau
   };
   return {
     group,person,chair,facing,
+    headBox(){return new THREE.Box3().setFromObject(head);},
+    headRestBox(){return new THREE.Box3().setFromObject(headRest);},
     setStand(v){stand=THREE.MathUtils.clamp(v,0,1);},
     setWalk(a){walk=THREE.MathUtils.clamp(a,0,1);if(walk<=0)rig.rest();},
     setHeading(r){rigG.rotation.y=r;},

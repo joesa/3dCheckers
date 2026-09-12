@@ -24,11 +24,16 @@ function withTimeout(p,ms){
   ]);
 }
 
-async function reachable(url){
+async function reachable(url,anon){
   const ctl=new AbortController();
   const t=setTimeout(()=>ctl.abort(),PING_MS);
   try{
-    await fetch(url+'/auth/v1/health',{signal:ctl.signal,cache:'no-store',mode:'cors'});
+    /* GoTrue answers /health 401 without an apikey. The browser logs that
+       failed fetch in the console even though we catch it here, which reads
+       like an outage to anyone watching while waiting in a room. Send the
+       anon key so a healthy API answers 200. */
+    const headers=anon?{apikey:anon}:{};
+    await fetch(url+'/auth/v1/health',{signal:ctl.signal,cache:'no-store',mode:'cors',headers});
     return true; // any HTTP reply means the API is listening
   }catch(e){
     return false;
@@ -41,7 +46,7 @@ function doInit(){
   return (async()=>{
     if(!CONFIG.SRV_URL){SRV.ok=false;SRV.why='no backend configured for '+location.hostname;return false;}
     try{
-      if(!(await reachable(CONFIG.SRV_URL))){SRV.ok=false;SRV.why='no reply from '+CONFIG.SRV_URL;return false;}
+      if(!(await reachable(CONFIG.SRV_URL,CONFIG.SRV_ANON))){SRV.ok=false;SRV.why='no reply from '+CONFIG.SRV_URL;return false;}
       const mod=await import('https://esm.sh/@supabase/supabase-js@2.45.0');
       sb=mod.createClient(CONFIG.SRV_URL,CONFIG.SRV_ANON,{auth:{persistSession:true,autoRefreshToken:true}});
       SRV.ok=true;SRV.why='';

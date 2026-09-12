@@ -1,5 +1,5 @@
 import * as GAME from './game.js';
-import {createWorld} from './world.js';
+import {createWorld,DUEL_VIEW,VIEW_TY} from './world.js';
 import {visibleSet} from './fog.js';
 import {makeAvatar,makeCrowd,makeNameTag} from './actors.js';
 import {chooseMove,LEVEL_NAMES,PERSONAS,taunt as aiTaunt,QK,qkReset} from './ai.js';
@@ -82,7 +82,7 @@ function buildActors(){
     const a=makeAvatar(team,facing,(SEED+(team==='red'?1:2))>>>0,getEquip().throne,avatarLook());
     anchor.add(a.group);
     anchors[team]=anchor;
-    rigs[team]={rig:a.rig,update:a.update,person:a.person,chair:a.chair,setStand:a.setStand,setWalk:a.setWalk,setHeading:a.setHeading};
+    rigs[team]={rig:a.rig,update:a.update,person:a.person,chair:a.chair,headBox:a.headBox,headRestBox:a.headRestBox,setStand:a.setStand,setWalk:a.setWalk,setHeading:a.setHeading};
     a.person.position.set(0,0,0);
   }
   if(crowd)world.removeObject(crowd.group);
@@ -729,7 +729,7 @@ function openingCamera(dur){
   const {camera,controls}=cam;
   controls.enabled=false;controls.autoRotate=false;
   const c0=camera.position.clone(),t0=controls.target.clone();
-  const p1=[0,11.8,12.4],t1=[0,.3,0];
+  const p1=[0,5.6,10.4],t1=[0,VIEW_TY,-.35];
   addTween(dur,p=>{
     const e=easeIO(p);
     camera.position.set(c0.x+(p1[0]-c0.x)*e,c0.y+(p1[1]-c0.y)*e,c0.z+(p1[2]-c0.z)*e);
@@ -2212,6 +2212,20 @@ $('#b-pass-premium').onclick=async()=>{
   }
 };
 
+/* ================= menu hub (tabbed, mobile-first) ================= */
+/* Tabs swap whole pages so no submenu ever pushes content below the fold. */
+function menuTab(page){
+  document.querySelectorAll('#menu-hub .hub-tab').forEach(t=>t.classList.toggle('on',t.dataset.page===page));
+  document.querySelectorAll('#menu-hub .hub-page').forEach(p=>p.classList.toggle('on',p.dataset.page===page));
+}
+document.querySelectorAll('#menu-hub .hub-tab').forEach(t=>t.onclick=()=>{sfx.click();menuTab(t.dataset.page);});
+/* lobby subviews replace the hub while open, then hand it back */
+new MutationObserver(()=>{
+  const hub=$('#menu-hub');
+  if(hub)hub.classList.toggle('hidden',!$('#lobby').classList.contains('hidden'));
+}).observe($('#lobby'),{attributes:true,attributeFilter:['class']});
+$('#b-worlds-menu').onclick=()=>{sfx.click();openThemes();};
+
 /* ================= menu wiring (new) ================= */
 
 $('#b-puzzle').onclick=()=>{sfx.click();startPuzzle();};
@@ -2230,14 +2244,15 @@ function currentProfile(){
 function updateAuthUI(){
   const btn=$('#b-auth');
   const me=signedIn(),p=currentProfile();
+  if(btn){
+    btn.textContent=(me&&p)?'Sign Out':'Sign In';
+  }
   if(me&&p){
-    btn.textContent='Sign Out';
     const handle=p.handle||(String(me.id).replace(/^local:/,''));
     MYHANDLE=handle;MYNAME=handle;OPPNAME=null;refreshNames();
     $('#profile-line').innerHTML='@'+handle+' &middot; <b>'+p.elo+'</b> elo &middot; '+p.wins+'W / '+p.losses+'L';
     show($('#profile-line'),true);
   }else{
-    btn.textContent='Sign In';
     MYHANDLE=null;OPPNAME=null;refreshNames();
     show($('#profile-line'),false);
   }
@@ -2674,6 +2689,16 @@ window.addEventListener('keydown',e=>{
   }
   else if((e.key==='t'||e.key==='T')&&!world.inspecting){
     toggleTheme();
+  }
+  else if((e.key==='m'||e.key==='M')&&!world.inspecting){
+    sfx.click();
+    if(!$('#shop').classList.contains('hidden')){$('#b-shop-close').click();}
+    else openShop();
+  }
+  else if((e.key==='w'||e.key==='W')&&!world.inspecting){
+    sfx.click();
+    if(!$('#themes').classList.contains('hidden'))show($('#themes'),false);
+    else openThemes();
   }
 });
 

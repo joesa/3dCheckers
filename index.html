@@ -87,31 +87,49 @@
 </div>
 
 <div id="menu" class="overlay">
-  <div class="panel glass">
+  <div class="panel glass menu-panel">
     <h1 class="title">AETHER<span>DRAUGHTS</span></h1>
     <p class="tag">Sky-borne checkers for duelists.<br/>Capture the storm. Crown your legend.</p>
-    <div class="menu-btns">
-      <button class="btn primary" id="b-hotseat">Pass &amp; Play</button>
-      <button class="btn" id="b-ai">Play vs Storm (Solo)</button>
-      <button class="btn quant-btn" id="b-quant">BEAT QUANTKING — FREE POINTS</button>
-      <button class="btn" id="b-puzzle">Daily Puzzle</button>
-      <button class="btn" id="b-gauntlet">Daily Gauntlet</button>
-      <button class="btn" id="b-online">Online Duel (WebRTC)</button>
-      <button class="btn" id="b-rooms">Open Rooms — play or watch</button>
-      <button class="btn" id="b-local">Same-Browser Tabs</button>
-      <button class="btn" id="b-corr">Correspondence (any device)</button>
-      <div class="menu-row2">
-        <button class="btn small" id="b-shop">Marketplace</button>
-        <button class="btn small" id="b-ladder">Ladder</button>
-        <button class="btn small" id="b-rivals">Rivals</button>
-        <button class="btn small" id="b-boards">Leaderboards</button>
-        <button class="btn small" id="b-bets">Betting</button>
-        <button class="btn small" id="b-hub">Daily &amp; Profile</button>
-        <button class="btn small" id="b-replay">Watch Replay</button>
-        <button class="btn small" id="b-auth">Sign In</button>
+    <div id="menu-hub">
+      <div class="hub-tabs" role="tablist">
+        <button class="hub-tab on" data-page="play" role="tab">Play</button>
+        <button class="hub-tab" data-page="solo" role="tab">Solo</button>
+        <button class="hub-tab" data-page="more" role="tab">More</button>
       </div>
-      <button class="btn ghost" id="b-howto">How to Play</button>
-      <p class="qk-tagline">Want to earn free points? <b>Beat QuantKing</b> in a one-on-one match. He can be beaten&hellip; barely.</p>
+      <div class="hub-page on" data-page="play">
+        <button class="btn primary big" id="b-hotseat">Pass &amp; Play</button>
+        <button class="btn big" id="b-online">Online Duel (WebRTC)</button>
+        <button class="btn big" id="b-rooms">Open Rooms — play or watch</button>
+        <button class="btn big" id="b-local">Same-Browser Tabs</button>
+        <button class="btn big" id="b-corr">Correspondence (any device)</button>
+      </div>
+      <div class="hub-page" data-page="solo">
+        <button class="btn primary big" id="b-ai">Play vs Storm (Solo)</button>
+        <button class="btn big quant-btn" id="b-quant">Beat QuantKing — Free Points</button>
+        <div class="menu-row2">
+          <button class="btn small" id="b-puzzle">Daily Puzzle</button>
+          <button class="btn small" id="b-gauntlet">Daily Gauntlet</button>
+        </div>
+        <button class="btn big" id="b-replay">Watch Replay</button>
+        <p class="qk-tagline">Want to earn free points? <b>Beat QuantKing</b> in a one-on-one match. He can be beaten&hellip; barely.</p>
+      </div>
+      <div class="hub-page" data-page="more">
+        <div class="menu-row2">
+          <button class="btn small" id="b-shop">Marketplace<span class="kb">M</span></button>
+          <button class="btn small" id="b-ladder">Ladder</button>
+          <button class="btn small" id="b-rivals">Rivals</button>
+        </div>
+        <div class="menu-row2">
+          <button class="btn small" id="b-boards">Leaderboards</button>
+          <button class="btn small" id="b-bets">Betting</button>
+          <button class="btn small" id="b-hub">Daily &amp; Profile</button>
+        </div>
+        <div class="menu-row2">
+          <button class="btn small" id="b-worlds-menu">Worlds<span class="kb">W</span></button>
+          <button class="btn small" id="b-howto">How to Play</button>
+        </div>
+        <button class="btn big" id="b-auth">Sign In</button>
+      </div>
     </div>
     <div class="profile-line hidden" id="profile-line"></div>
     <div id="lobby" class="hidden"></div>
@@ -132,6 +150,7 @@
     <ul>
       <li><b>Click one of your pieces</b> — glowing tiles show its legal moves (<span class="ok-l">green = move</span>, <span class="bad-l">red = capture</span>). <b>Click a tile</b> to go.</li>
       <li>Drag to orbit the island · scroll to zoom · click empty ground to deselect.</li>
+      <li>Shortcuts — <b>M</b> Marketplace, <b>W</b> Worlds, <b>C</b> inspect the timepiece, <b>T</b> light/dark, <b>1–5</b> emotes.</li>
       <li>Ember moves first. The avatars' hands fly in whenever a piece is played — yours and theirs.</li>
     </ul>
     <h4>Rules — English Draughts</h4>

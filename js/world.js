@@ -6,7 +6,18 @@ import {makePiece,addCrown,TEAM_COLORS,setSkin,setEnv,setShape,setArmy as setArm
 import {THEMES,DEFAULT_THEME} from './themes.js';
 import {makeClock,THEME_CLOCKS} from './clocks.js';
 
-const TOP_Y=.05;
+/* The board sits on a pedestal table: BOARD_Y lifts the whole playing surface
+   off the lawn so the seated duelists look DOWN at it across the table edge,
+   instead of the board reading as painted on the floor. Everything on the board
+   derives its height from TOP_Y, so raising it here moves tiles, pieces, markers,
+   bursts and the pick-plane together. */
+const BOARD_Y=.95;
+const TOP_Y=BOARD_Y+.05;
+export const VIEW_TY=BOARD_Y+.2;        // orbit pivot rides up with the table
+/* Behind-the-chair duel view: direction is what survives fitView (it re-scales
+   distance along the current view dir), so the pitch here is the real framing.
+   Steep enough that the seated avatar's head never eclipses the near rank. */
+export const DUEL_VIEW={p:[0,6.2,9.6],t:[0,VIEW_TY,-.35]};
 const sq3=([r,c],y=TOP_Y)=>new THREE.Vector3(c-3.5,y,r-3.5);
 const sqKey=s=>s[0]+','+s[1];
 
@@ -32,10 +43,10 @@ export function createWorld(canvas,initialTheme){
   scene.fog=new THREE.FogExp2(0x1c1430,.012);
 
   const camera=new THREE.PerspectiveCamera(46,1,.1,700);
-  camera.position.set(0,11.8,12.4);
+  camera.position.set(DUEL_VIEW.p[0],DUEL_VIEW.p[1],DUEL_VIEW.p[2]);
 
   const controls=new OrbitControls(camera,canvas);
-  controls.target.set(0,0,0);
+  controls.target.set(DUEL_VIEW.t[0],DUEL_VIEW.t[1],DUEL_VIEW.t[2]);
   controls.enableDamping=true;
   controls.dampingFactor=.06;
   controls.enablePan=false;
@@ -144,9 +155,9 @@ export function createWorld(canvas,initialTheme){
   platform.position.y=-.32;platform.receiveShadow=true;
   islandGroup.add(platform);
 
-  /* glow ring under board */
+  /* glow ring under the table */
   const glowRing=new THREE.Mesh(new THREE.TorusGeometry(6.05,.05,8,72),new THREE.MeshBasicMaterial({color:0x54d6ff,transparent:true,opacity:.85,blending:THREE.AdditiveBlending,fog:false,depthWrite:false}));
-  glowRing.rotation.x=-Math.PI/2;glowRing.position.y=-.01;
+  glowRing.rotation.x=-Math.PI/2;glowRing.position.y=BOARD_Y-.14;
   scene.add(glowRing);
 
   /* frame */
@@ -154,9 +165,28 @@ export function createWorld(canvas,initialTheme){
   const frameMeshes=[];
   for(const[fx,fz,fw,fd]of[[0,-4.25,8.9,.45],[0,4.25,8.9,.45],[-4.25,0,.45,8.9],[4.25,0,.45,8.9]]){
     const b=new THREE.Mesh(new THREE.BoxGeometry(fw,.26,fd),frameMat);
-    b.position.set(fx,.06,fz);b.castShadow=true;b.receiveShadow=true;
+    b.position.set(fx,BOARD_Y+.03,fz);b.castShadow=true;b.receiveShadow=true;
+    b.userData.noOcclude=true;
     scene.add(b);
     frameMeshes.push(b);
+  }
+
+  /* pedestal: the board rests on an octagonal plinth so it reads as a table
+     the duelists sit around, not a decal on the lawn */
+  {
+    const pedMat=new THREE.MeshStandardMaterial({color:0x57506e,roughness:.75,metalness:.15});
+    const ped=new THREE.Mesh(new THREE.CylinderGeometry(4.55,3.7,BOARD_Y,8),pedMat);
+    ped.rotation.y=Math.PI/8;
+    ped.position.y=BOARD_Y/2-.02;
+    ped.castShadow=true;ped.receiveShadow=true;
+    ped.userData.noOcclude=true;
+    scene.add(ped);
+    const lipMat=new THREE.MeshStandardMaterial({color:0x8a7f5c,roughness:.5,metalness:.4,emissive:0x1d1608,emissiveIntensity:.35});
+    const lip=new THREE.Mesh(new THREE.TorusGeometry(4.58,.06,8,8),lipMat);
+    lip.rotation.x=Math.PI/2;lip.rotation.z=Math.PI/8;
+    lip.position.y=BOARD_Y-.06;lip.castShadow=true;
+    lip.userData.noOcclude=true;
+    scene.add(lip);
   }
 
   /* tiles */
@@ -166,7 +196,7 @@ export function createWorld(canvas,initialTheme){
   const tileGeo=new THREE.BoxGeometry(1,.14,1);
   for(let r=0;r<8;r++)for(let c=0;c<8;c++){
     const m=new THREE.Mesh(tileGeo,(r+c)%2===1?darkTile:lightTile);
-    m.position.set(c-3.5,-.02,r-3.5);
+    m.position.set(c-3.5,BOARD_Y-.02,r-3.5);
     m.receiveShadow=true;
     m.userData.sq=[r,c];
     scene.add(m);
@@ -215,7 +245,7 @@ export function createWorld(canvas,initialTheme){
   /* seat-placement ghost ring */
   const ghostMat=new THREE.MeshBasicMaterial({color:0x5fe08a,transparent:true,opacity:.6,blending:THREE.AdditiveBlending,depthWrite:false,fog:false,side:THREE.DoubleSide});
   const seatGhost=new THREE.Mesh(new THREE.RingGeometry(.72,1.12,40),ghostMat);
-  seatGhost.rotation.x=-Math.PI/2;seatGhost.position.y=TOP_Y+.02;seatGhost.visible=false;scene.add(seatGhost);
+  seatGhost.rotation.x=-Math.PI/2;seatGhost.position.y=.06;seatGhost.visible=false;scene.add(seatGhost);
 
   /* dedicated board light for readability */
   const boardLight=new THREE.SpotLight(0xfff2d8,2.2,30,.6,.65,1);
@@ -592,7 +622,8 @@ export function createWorld(canvas,initialTheme){
     return null;
   }
 
-  const _plane=new THREE.Plane(new THREE.Vector3(0,1,0),-TOP_Y);
+  /* seat placement casts onto the LAWN, not the raised board surface */
+  const _plane=new THREE.Plane(new THREE.Vector3(0,1,0),0);
   const _hit=new THREE.Vector3();
   function toPtr(cx,cy){
     const rect=canvas.getBoundingClientRect();
@@ -608,7 +639,7 @@ export function createWorld(canvas,initialTheme){
   function rayHitsRoot(cx,cy,root){
     if(!root)return false;
     toPtr(cx,cy);
-    return raycaster.intersectObject(root,true).length>0;
+    return raycaster.intersectObject(root,true).some(h=>!h.object.userData.noOcclude);
   }
 
   canvas.addEventListener('pointermove',ev=>{
@@ -660,9 +691,9 @@ export function createWorld(canvas,initialTheme){
     const fit=Math.max(fitV,fitH,controls.minDistance);
     if(controls.maxDistance<fit)controls.maxDistance=fit+2;
     let dir=camera.position.clone().sub(controls.target);
-    if(dir.lengthSq()<1e-6)dir.set(0,11.8,12.4);
+    if(dir.lengthSq()<1e-6)dir.set(DUEL_VIEW.p[0],DUEL_VIEW.p[1],DUEL_VIEW.p[2]);
     dir.normalize();
-    controls.target.set(0,0,0);
+    controls.target.set(DUEL_VIEW.t[0],VIEW_TY,DUEL_VIEW.t[2]);
     camera.position.copy(controls.target).addScaledVector(dir,fit);
     controls.update();
     lastFit=fit;
@@ -1276,7 +1307,7 @@ export function createWorld(canvas,initialTheme){
     removeObject(o){scene.remove(o);},
     groundAt(cx,cy){return groundAt(cx,cy);},
     rayHitsRoot(cx,cy,root){return rayHitsRoot(cx,cy,root);},
-    showGhost(x,z,valid){seatGhost.visible=true;seatGhost.position.set(x,TOP_Y+.02,z);ghostMat.color.setHex(valid?0x5fe08a:0xe0605f);},
+    showGhost(x,z,valid){seatGhost.visible=true;seatGhost.position.set(x,.06,z);ghostMat.color.setHex(valid?0x5fe08a:0xe0605f);},
     hideGhost(){seatGhost.visible=false;},
     makeGroup(x=0,y=0,z=0){const g=new THREE.Group();g.position.set(x,y,z);scene.add(g);return g;},
     sqToVec(sq,y){return sq3(sq,y===undefined?TOP_Y:y);},

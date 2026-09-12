@@ -134,6 +134,58 @@ label{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1p
 .rules{margin:6px 0 4px 18px;color:var(--ink);font-size:15px;line-height:1.65}
 .rules b{color:var(--gold)}
 
+/* ---------- menu hub (mobile-first tabbed menu) ---------- */
+/* One short page per tab: the panel never scrolls past a thumb-reach. Tab taps
+   swap pages instead of stacking submenus below the fold. */
+.menu-panel{display:flex;flex-direction:column;gap:0}
+.hub-tabs{
+  display:flex;gap:6px;margin:4px 0 16px;padding:5px;
+  background:rgba(8,5,22,.55);border:1px solid var(--edge);border-radius:14px;
+}
+.hub-tab{
+  flex:1;border:1px solid transparent;border-radius:10px;background:transparent;
+  color:var(--dim);font-family:var(--font-title);font-weight:600;font-size:14px;
+  letter-spacing:2px;text-transform:uppercase;padding:12px 6px;cursor:pointer;
+  transition:all .16s ease;-webkit-tap-highlight-color:transparent;min-height:44px;
+}
+.hub-tab:hover{color:var(--ink)}
+.hub-tab.on{
+  color:#2a0d05;background:linear-gradient(180deg,#ff9a5c,#e8593f);
+  box-shadow:0 3px 14px rgba(255,110,60,.35);
+}
+.hub-page{display:none;flex-direction:column;gap:10px}
+.hub-page.on{display:flex}
+.hub-page .btn.big{
+  width:100%;padding:15px 18px;font-size:16px;letter-spacing:1.2px;min-height:52px;
+  text-align:center;
+}
+.hub-page .menu-row2{gap:10px}
+.hub-page .menu-row2 .btn.small{padding:13px 8px;font-size:13.5px;min-height:48px}
+.kb{
+  display:inline-block;margin-left:7px;padding:1px 6px;border-radius:5px;
+  border:1px solid var(--edge);background:rgba(8,5,22,.6);
+  font-family:var(--font-title);font-size:10px;letter-spacing:1px;color:var(--gold);
+  vertical-align:1px;
+}
+@media (max-width:560px){
+  #menu.overlay{align-items:flex-end;padding:0}
+  #menu .panel.menu-panel{
+    max-width:100vw;max-height:94dvh;border-radius:22px 22px 0 0;padding:14px 14px calc(12px + env(safe-area-inset-bottom));
+    overflow-y:auto;overscroll-behavior:contain;
+  }
+  .menu-panel .title{font-size:27px;letter-spacing:3px}
+  .menu-panel .tag{margin:6px 0 10px;font-size:13px;line-height:1.45}
+  .hub-tabs{margin:2px 0 10px;padding:4px}
+  .hub-tab{padding:10px 4px;font-size:13px;letter-spacing:1.5px}
+  .hub-page{gap:8px}
+  .hub-page .btn.big{padding:12px 14px;font-size:15px;min-height:46px;letter-spacing:1px}
+  .hub-page .menu-row2 .btn.small{padding:11px 6px;min-height:44px}
+  .menu-panel .profile-line{margin-top:10px}
+}
+@media (hover:none) and (pointer:coarse){
+  .btn:active{transform:translateY(1px)}
+}
+
 /* ---------- lobby ---------- */
 #lobby{margin-top:22px;border-top:1px solid var(--edge);padding-top:16px;text-align:left}
 #lobby .status{margin-top:12px;font-size:14px;color:var(--frost);min-height:20px}
@@ -253,6 +305,19 @@ label{font-size:12px;color:var(--dim);text-transform:uppercase;letter-spacing:1p
 .profile-line b{color:var(--gold)}
 
 /* ---------- shop ---------- */
+/* Marketplace: dock it to the right so the island stays visible while you shop —
+   equipping a shape/palette/theme re-renders the board live and you can see it. */
+#shop.overlay{
+  align-items:stretch;justify-content:flex-end;padding:0;pointer-events:none;
+  background:linear-gradient(to left,rgba(6,3,18,.62),rgba(6,3,18,.14) 48%,transparent 74%);
+}
+#shop .panel{
+  pointer-events:auto;height:100%;max-height:none;max-width:min(430px,94vw);
+  border-radius:0;border-right:none;display:flex;flex-direction:column;gap:6px;overflow-y:auto;
+}
+#shop .shop-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+#shop .menu-btns{margin-top:12px;flex:none}
+@media (max-width:560px){#shop .panel{max-width:100vw}}
 .shop-panel{max-height:82vh;overflow:auto;width:min(680px,94vw)}
 .shop-wallet{float:right;font-size:15px;color:var(--gold)}
 .shop-tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 14px}
