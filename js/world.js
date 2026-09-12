@@ -32,7 +32,7 @@ export function createWorld(canvas,initialTheme){
   scene.fog=new THREE.FogExp2(0x1c1430,.012);
 
   const camera=new THREE.PerspectiveCamera(46,1,.1,700);
-  camera.position.set(0,9.7,14);
+  camera.position.set(0,11.8,12.4);
 
   const controls=new OrbitControls(camera,canvas);
   controls.target.set(0,0,0);
@@ -660,7 +660,7 @@ export function createWorld(canvas,initialTheme){
     const fit=Math.max(fitV,fitH,controls.minDistance);
     if(controls.maxDistance<fit)controls.maxDistance=fit+2;
     let dir=camera.position.clone().sub(controls.target);
-    if(dir.lengthSq()<1e-6)dir.set(0,9.7,14);
+    if(dir.lengthSq()<1e-6)dir.set(0,11.8,12.4);
     dir.normalize();
     controls.target.set(0,0,0);
     camera.position.copy(controls.target).addScaledVector(dir,fit);

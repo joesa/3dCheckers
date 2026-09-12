@@ -729,14 +729,14 @@ function openingCamera(dur){
   const {camera,controls}=cam;
   controls.enabled=false;controls.autoRotate=false;
   const c0=camera.position.clone(),t0=controls.target.clone();
-  const p1=[0,9.7,14],t1=[0,0,0];
+  const p1=[0,11.8,12.4],t1=[0,.3,0];
   addTween(dur,p=>{
     const e=easeIO(p);
     camera.position.set(c0.x+(p1[0]-c0.x)*e,c0.y+(p1[1]-c0.y)*e,c0.z+(p1[2]-c0.z)*e);
     controls.target.set(t0.x+(t1[0]-t0.x)*e,t0.y+(t1[1]-t0.y)*e,t0.z+(t1[2]-t0.z)*e);
   },()=>{
     camera.position.set(p1[0],p1[1],p1[2]);
-    controls.target.set(0,0,0);
+    controls.target.set(t1[0],t1[1],t1[2]);
     controls.enabled=true;
   });
 }
